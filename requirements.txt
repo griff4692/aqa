@@ -1,8 +1,8 @@
+allennlp==1.0.0
+allennlp-models==1.0.0
 numpy
 pandas
 pytorch_lightning
 nlp
-neuralcoref
-spacy==2.1.0
 torch
 torchvision
