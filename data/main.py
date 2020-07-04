@@ -36,15 +36,15 @@ if __name__ == '__main__':
 
     dtypes = list(dataset.keys())  # train, test, etc,
     for dtype in dtypes:
-        d = dataset[dtype]
-        n = len(d)
+        dataset_type = dataset[dtype]
+        n = len(dataset_type)
         print('Processing {} examples from {} set'.format(n, dtype))
         out_fn = os.path.join('trivia_qa', 'coref_{}.pk'.format(dtype))
         with Manager() as manager:
             p = Pool()
             lock = manager.Lock()
             ctr = manager.Value('i', 0)
-            clusters = list(p.map(partial(process_corref, ctr=ctr, lock=lock), dataset[dtype]))
+            clusters = list(p.map(partial(process_corref, ctr=ctr, lock=lock), dataset_type))
             qids = set(list(map(lambda c: c['question_id'], clusters)))
         print('Unique QIDs={}'.format(len(qids)))
         print(len(clusters))
