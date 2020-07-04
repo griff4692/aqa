@@ -11,6 +11,7 @@ from torch.utils.data import Subset
 
 def construct_graph(example, ctr=None, lock=None):
     contexts = list(map(lambda x: {'sentence': x}, example['entity_pages']['wiki_context']))
+    print(contexts)
     coref_pred = predictor.predict_batch_json(contexts)
     with lock:
         ctr.value += 1
@@ -23,7 +24,7 @@ def construct_graph(example, ctr=None, lock=None):
     return {
         'question_id': example['question_id'],
         'entity_pages': {
-            'title': contexts['title'],
+            'title': example['entity_pages']['title'],
             'coref': coref_pred
         }
     }
