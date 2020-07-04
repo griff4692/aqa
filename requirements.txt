@@ -1,0 +1,9 @@
+apache_beam
+numpy
+pandas
+pytorch_lightning
+nlp
+neuralcoref
+spacy==2.1.0
+torch
+torchvision
