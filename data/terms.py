@@ -28,7 +28,6 @@ if __name__ == '__main__':
 
         if (i + 1) % 10000 == 0:
             print('Added wiki docs from {} out of {} examples'.format(i + 1, n))
-            break
     print('Fitting TF-IDF vectorizer')
     tfidf.fit(token_corpus)
 
