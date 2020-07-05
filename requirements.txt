@@ -1,8 +1,13 @@
+allennlp==1.0.0
+allennlp-models==1.0.0
+matplotlib
+neuralcoref
+networkx
+nlp
 numpy
 pandas
 pytorch_lightning
-nlp
-neuralcoref
+scikit-learn
 spacy==2.1.0
 torch
 torchvision
