@@ -5,14 +5,6 @@ from nlp import load_dataset
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 
-def overlap(tfidf_vectorizer, str1, str2):
-    feats = tfidf_vectorizer.transform([
-        str1,
-        str2
-    ])
-    return (feats[0, :] * feats[1, :]).todense()[0, 0]
-
-
 if __name__ == '__main__':
     debug_mode = len(sys.argv) > 1 and sys.argv[1] == 'debug'
     tfidf = TfidfVectorizer(stop_words='english', min_df=2)
@@ -25,7 +17,6 @@ if __name__ == '__main__':
     print('Adding corpus documents.')
     for i, example in enumerate(dataset):
         token_corpus += example['entity_pages']['wiki_context']
-
         if (i + 1) % 10000 == 0:
             print('Added wiki docs from {} out of {} examples'.format(i + 1, n))
     print('Fitting TF-IDF vectorizer')
