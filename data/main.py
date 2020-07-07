@@ -261,8 +261,8 @@ if __name__ == '__main__':
     sentence_nlp.add_pipe(sentence_nlp.create_pipe('sentencizer'))
 
     archive = load_archive(
-        "../models/imojie",
-        weights_file="../models/imojie/model_state_epoch_7.th",
+        "../pretrained_models/imojie",
+        weights_file="../pretrained_models/imojie/model_state_epoch_7.th",
         cuda_device=-1)
 
     predictor = Predictor.from_archive(archive, "noie_seq2seq")
