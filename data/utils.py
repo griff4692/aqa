@@ -36,7 +36,7 @@ def extract_contexts(dataset):
                 assert v == d[k]
             else:
                 d[k] = v
-        if (i + 1) % 10000 == 0:
+        if (i + 1) % 10000 == 0 or (i + 1) == len(dataset):
             print('Loaded contexts for {} examples.'.format(i + 1))
     print('Unique documents={}'.format(len(d)))
     return d

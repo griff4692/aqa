@@ -1,6 +1,8 @@
 from collections import defaultdict
-import os
+from functools import partial
 import json
+from multiprocessing import Manager, Pool
+import os
 import re
 import sys
 from time import time
@@ -39,26 +41,40 @@ def construct_coref(spacy_doc):
     return obj
 
 
-def process_contexts(contexts, is_debug=True):
-    debug_str = '_mini' if is_debug else ''
-    out_fn = os.path.join('trivia_qa', 'contexts{}.json'.format(debug_str))
-    outputs = {}
+def process_context(t, lock=None, ctr=None):
+    coref_obj = construct_coref(coref_nlp(t))
+    coref_obj['context'] = t
+    with lock:
+        ctr.value += 1
+        if ctr.value % update_incr == 0:
+            print('Processed {} contexts...'.format(ctr.value))
 
-    for k, t in contexts.items():
-        coref_obj = construct_coref(coref_nlp(t))
-        coref_obj['context'] = t
-        outputs[k] = coref_obj
+    return coref_obj
 
-    print('Saving {} contexts to {}'.format(len(outputs), out_fn))
+
+def process_dataset(dataset, out_fn):
+    contexts = extract_contexts(dataset)
+    keys, texts = dict_to_lists(contexts)
+    print('Processing {} contexts...'.format(len(contexts)))
+    with Manager() as manager:
+        p = Pool()
+        lock = manager.Lock()
+        ctr = manager.Value('i', 0)
+        coref_outputs = list(p.map(partial(process_context, lock=lock, ctr=ctr), texts))
+    output_dict = {}
+    for k, v in zip(keys, coref_outputs):
+        output_dict[k] = v
+    print('Saving {} contexts to {}...'.format(len(output_dict), out_fn))
     with open(out_fn, 'w') as fd:
-        json.dump(outputs, fd)
+        json.dump(output_dict, fd)
 
 
 if __name__ == '__main__':
     debug_mode = len(sys.argv) > 1 and sys.argv[1] == 'debug'
     device = 0 if torch.cuda.is_available() else -1
+    update_incr = 10 if debug_mode else 10000
 
-    print('Loading Dataset')
+    print('Loading Dataset...')
     debug_data_fn = 'trivia_qa/train_mini.json'
     if debug_mode and os.path.exists(debug_data_fn):
         with open(debug_data_fn, 'r') as fd:
@@ -77,16 +93,14 @@ if __name__ == '__main__':
 
     start_time = time()
     if debug_mode:
-        contexts = extract_contexts(dataset)
-        print('Processing {} contexts in debug mode'.format(len(contexts)))
-        process_contexts(contexts)
+        out_fn = os.path.join('trivia_qa', 'contexts_debug.json')
+        process_dataset(dataset, out_fn)
     else:
-        dtypes = list(dataset.keys())  # train, test, validation
+        dtypes = list(sorted(list(dataset.keys())))  # test, train, validation
+        print(dtypes)
         for dtype in dtypes:
-            d = dataset[dtype]
-            contexts = extract_contexts(d)
-            n = len(d)
-            print('Processing {} contexts from {}'.format(len(contexts), dtype))
-            process_contexts(contexts)
+            print('Resolving coreferent expressions for {} set'.format(dtype))
+            out_fn = os.path.join('trivia_qa', 'contexts_{}.json'.format(dtype))
+            process_dataset(dataset[dtype], out_fn)
 
     duration(start_time)
