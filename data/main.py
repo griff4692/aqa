@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import neuralcoref
 from nlp import load_dataset
 import spacy
+import torch
 from torch.utils.data import Subset
 
 ARG_REGEX = r'\[ARG(\d{1,3}: [^\[\]]+)\]'
@@ -169,6 +170,21 @@ def construct_ie_tuples(args, verb):
     return all_paths_w_verb
 
 
+# def process_batch(sents):
+#     ie_tups = []
+#     inp_instances = predictor._dataset_reader.text_to_instance(sents)
+#     outputs = predictor._model.forward_on_instances(inp_instances)
+#     outputs = sanitize(outputs)
+#     outputs = list(map(lambda output: process_imojie_output(output['predicted_tokens'][0]), outputs))
+#     ie_tup = list(map(extract_tups_from_str, outputs))
+#     ie_tup_valid = list(filter(lambda x: len(x) == 3, ie_tup))
+#
+#     if len(ie_tup_valid) < len(ie_tup):
+#         invalid_tups = list(set(ie_tup) - set(ie_tup_valid))
+#         print('Invalid tuples:\n\t{}'.format('\n'.join(invalid_tups)))
+#     ie_tups += ie_tup_valid
+
+
 def construct_graph(example):
     contexts = example['entity_pages']
     sents = []
@@ -239,6 +255,7 @@ def process_dataset(d, dtype, debug_mode=False):
 
 if __name__ == '__main__':
     debug_mode = len(sys.argv) > 1 and sys.argv[1] == 'debug'
+    device = 0 if torch.cuda.is_available() else -1
 
     print('Loading Dataset')
     debug_data_fn = 'trivia_qa/train_mini.json'
@@ -263,7 +280,7 @@ if __name__ == '__main__':
     archive = load_archive(
         "../pretrained_models/imojie",
         weights_file="../pretrained_models/imojie/model_state_epoch_7.th",
-        cuda_device=-1)
+        cuda_device=device)
 
     predictor = Predictor.from_archive(archive, "noie_seq2seq")
 
