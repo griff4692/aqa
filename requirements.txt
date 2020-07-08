@@ -1,8 +1,20 @@
 allennlp==1.0.0
 allennlp-models==1.0.0
+<<<<<<< HEAD
 numpy
 pandas
 pytorch_lightning
 nlp
+=======
+matplotlib
+neuralcoref
+networkx
+nlp
+numpy
+pandas
+pytorch_lightning
+scikit-learn
+spacy==2.1.0
+>>>>>>> graphs
 torch
 torchvision

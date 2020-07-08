@@ -1,2 +1,8 @@
 .idea/
 data/trivia_qa/
+pretrained_models/
+.tmp
+__pycache__
+*.pyc
+*.tmp
+md5sums.txt
