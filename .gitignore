@@ -1,5 +1,5 @@
 .idea/
-data/trivia_qa/
+data/
 pretrained_models/
 .tmp
 __pycache__

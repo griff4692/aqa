@@ -1,6 +1,7 @@
 allennlp==1.0.0
 allennlp-models==1.0.0
 matplotlib
+spacy==2.1.0
 neuralcoref
 networkx
 nlp
@@ -8,6 +9,5 @@ numpy
 pandas
 pytorch_lightning
 scikit-learn
-spacy==2.1.0
 torch
 torchvision
