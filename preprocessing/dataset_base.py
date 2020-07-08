@@ -1,5 +1,6 @@
 import json
 import os
+import unicodedata
 
 from nlp import load_dataset
 from torch.utils.data import Subset
@@ -76,11 +77,11 @@ class HotpotQA(DatasetBase):
             for context in example['context']:
                 keys.append(context[0])
                 # Given as list of sentences.  need one passage for proper coref resolution
-                texts.append(' '.join(context[1]))
+                texts.append(unicodedata.normalize('NFKD', ' '.join(context[1])))
         return keys, texts
 
     def remove_q_types(self, examples, qtypes=['comparison']):
-        return list(filter(lambda x: not x['type'] in qtypes, examples))
+        return list(filter(lambda x: 'type' not in x or not x['type'] in qtypes, examples))
 
     def get_train(self):
         with open(os.path.join(self.data_dir, 'hotpot_train_v1.1.json'), 'r') as fd:

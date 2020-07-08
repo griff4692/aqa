@@ -68,7 +68,7 @@ def resolve_corefs(dataset, dtype):
     replacing coreferent entity 'clusters' with their head (canonical) term.
     """
     keys, texts = dataset.get_context_kv_pairs(dtype)
-    print('Processing {} contexts...'.format(len(keys)))
+    print('Processing {} contexts for {}...'.format(len(keys), dtype))
     with Manager() as manager:
         p = Pool()
         lock = manager.Lock()
