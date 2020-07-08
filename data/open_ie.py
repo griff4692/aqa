@@ -47,7 +47,7 @@ def extract_ie(example):
     ie_tups = []
 
     n = len(sents)
-    max_batch_size = 500
+    max_batch_size = 400
     outputs = []
     for start_idx in range(0, n, max_batch_size):
         end_idx = min(start_idx + max_batch_size, n)
@@ -81,7 +81,7 @@ def process_dataset(contexts, out_fn):
 
 if __name__ == '__main__':
     debug_mode = len(sys.argv) > 1 and sys.argv[1] == 'debug'
-    device = 1 if torch.cuda.is_available() else -1
+    device = 0 if torch.cuda.is_available() else -1
     update_incr = 1 if debug_mode else 1000
 
     print('Loading Dataset')
