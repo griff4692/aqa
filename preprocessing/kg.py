@@ -1,20 +1,6 @@
+import pickle
+
 SIM_THRESHOLD = 0.7
-
-
-def resolve_node(new_node_str, graph) -> Node:
-    match = _node_match(new_node_str, graph)
-    if match is None:
-        match = graph.add_node(new_node_str)
-    else:
-        print('Merging \'{}\' --> \'{}\''.format(new_node_str, match.name))
-        match.add_alt(new_node_str)
-        match.incr_weight()
-    return match
-
-
-def overlap(a, b):
-    feats = tf_idf.transform([a.lower(), b.lower()])
-    return (feats[0, :] * feats[1, :].T).todense()[0, 0]
 
 
 class Node:
@@ -33,6 +19,33 @@ class Node:
 
     def add_alt(self, alt_name):
         self.alts.add(alt_name)
+
+
+def resolve_node_edge(new_node1_str, new_node2_str, edge_str, graph) -> Node:
+    match1 = _node_match(new_node1_str, graph)
+    match2 = _node_match(new_node2_str, graph)
+    if new_node1_str != match1.name:
+        match1.add_alt(new_node1_str)
+        match1.incr_weight()
+
+    if new_node2_str != match2.name:
+        match2.add_alt(new_node1_str)
+        match2.incr_weight()
+       
+    graph.add_node(match1.name)
+    graph.add_node(match2.name)
+    graph.add_edge(match1, match2, edge_str)
+    
+
+ def resolve_node(new_node_str, graph) -> Node:
+     match = _node_match(new_node_str, graph)
+     if new_node_str != match.name:
+         print('Merging \'{}\' --> \'{}\''.format(new_node_str, match.name))
+     graph.add_node(match)
+
+def overlap(a, b):
+    feats = tf_idf.transform([a.lower(), b.lower()])
+    return (feats[0, :] * feats[1, :].T).todense()[0, 0]
 
 
 class EdgeList:
@@ -61,9 +74,9 @@ class Graph:
         self.adj_list = {}
 
     def add_node(self, node_str):
-        assert node_str not in self.adj_list
-        u = Node(name=node_str, weight=1)
-        self.adj_list[node_str] = EdgeList(u)
+        if node_str not in self.adj_list:
+            u = Node(name=node_str, weight=1)
+            self.adj_list[node_str] = EdgeList(u)
 
     def node_names(self):
         return list(self.adj_list.keys())
@@ -72,23 +85,25 @@ class Graph:
         return [e.u for e in self.adj_list.values()]
 
     def add_edge(self, u, v, edge_attrs):
-        self.adj_list[u.name].add_edge(v, edge_attrs)
+        if v not in self.adj_list[u.name].v and edge_attrs not in self.adj_list[u.name].edge_attrs:
+            self.adj_list[u.name].add_edge(v, edge_attrs)
 
     def edge_idx(self, u, v):
         return self.adj_list[u].idx(v)
 
 
 def _node_match(new_node_str, graph):
-    match = None
+    match = Node(name=new_node_str, weight=1)
     max_sim = 0.0
     for node in graph.nodes():
         max_overlap = max(list(map(lambda x: overlap(new_node_str, x), node.all_names())))
         if max_overlap >= max(max_sim, SIM_THRESHOLD):
             max_sim = max_overlap
             match = node
+            print('Merging \'{}\' --> \'{}\''.format(new_node_str, match.name))
     return match
 
 
 if __name__ == '__main__':
-    with open('../data/trivia_qa/tf_idf_vectorizer.pk', 'rb') as fd:
+    with open('trivia_qa/tf_idf_vectorizer.pk', 'rb') as fd:
         tf_idf = pickle.load(fd)
