@@ -30,7 +30,7 @@ def resolve_node_edge(new_node1_str, new_node2_str, edge_str, graph) -> Node:
         match1.incr_weight()
 
     if new_node2_str != match2.name:
-        match2.add_alt(new_node1_str)
+        match2.add_alt(new_node2_str)
         match2.incr_weight()
        
     graph.add_node(match1.name)
