@@ -75,9 +75,14 @@ class HotpotQA(DatasetBase):
         keys, texts = [], []
         for example in self[type]:
             for context in example['context']:
-                keys.append(context[0])
-                # Given as list of sentences.  need one passage for proper coref resolution
-                texts.append(unicodedata.normalize('NFKD', ' '.join(context[1])))
+                k, v = context[0], unicodedata.normalize('NFKD', ' '.join(context[1]))
+                if k not in keys:  # there are duplicate passages with same context
+                    keys.append(k)
+                    # Given as list of sentences.  need one passage for proper coref resolution
+                    texts.append(v)
+                else:
+                    idx = keys.index(k)
+                    assert v == texts[idx]
         return keys, texts
 
     def remove_q_types(self, examples, qtypes=['comparison']):

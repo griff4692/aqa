@@ -67,8 +67,9 @@ def resolve_corefs(dataset, dtype):
     of 'context', 'clusters', 'resolved' where 'context' is the original text, and 'resolved' is the output of
     replacing coreferent entity 'clusters' with their head (canonical) term.
     """
+    print('Loading {} set...'.format(dtype))
     keys, texts = dataset.get_context_kv_pairs(dtype)
-    print('Processing {} contexts for {}...'.format(len(keys), dtype))
+    print('Processing {} contexts for {} set...'.format(len(keys), dtype))
     with Manager() as manager:
         p = Pool()
         lock = manager.Lock()
@@ -77,7 +78,7 @@ def resolve_corefs(dataset, dtype):
     output_dict = {}
     for k, v in zip(keys, coref_outputs):
         output_dict[k] = v
-    out_fn = os.path.join('../data', dataset.name, 'contexts_{}.json'.format(dtype))
+    out_fn = os.path.join('..', 'data', dataset.name, 'contexts_{}.json'.format(dtype))
     print('Saving {} contexts to {}...'.format(len(output_dict), out_fn))
     with open(out_fn, 'w') as fd:
         json.dump(output_dict, fd)

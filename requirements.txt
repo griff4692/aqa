@@ -9,5 +9,6 @@ numpy
 pandas
 pytorch_lightning
 scikit-learn
+textpipeliner
 torch
 torchvision
