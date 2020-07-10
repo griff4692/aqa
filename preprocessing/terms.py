@@ -1,28 +1,59 @@
+import argparse
+import json
 import pickle
 import sys
 
 from nlp import load_dataset
+import re
+from tqdm import tqdm
 from sklearn.feature_extraction.text import TfidfVectorizer
+import string
+from utils import clean_text
 
+from tfidf import TfidfHommade
 
 if __name__ == '__main__':
-    debug_mode = len(sys.argv) > 1 and sys.argv[1] == 'debug'
-    tfidf = TfidfVectorizer(stop_words='english', min_df=2)
-
+    
+    parser = argparse.ArgumentParser('Build tf-idf method.')
+    parser.add_argument('-use_sklearn', default= False,
+                        help='use scikit-learn or hommade vectorizer')
+    parser.add_argument('-dataset', default= 'hotpot',
+                        help='qa dataset')
+    args = parser.parse_args()
+    
+    if args.dataset == 'hotpot':
+        source = 'hotpot_qa'
+    elif args.dataset == 'trivia':
+        source = 'trivia_qa'
+    else:
+        sys.exit('dataset should be hotpot or trivia')
+        
     print('Loading dataset...')
-    dataset = load_dataset('../data/trivia_qa', 'rc')['train']
-
+    input_fn = './hotpot_qa/hotpot_train_v1.1.json'
+    with open(input_fn) as f:
+        dataset = json.load(f)
+    
     token_corpus = []
-    n = len(dataset)
-    print('Adding corpus documents.')
-    for i, example in enumerate(dataset):
-        token_corpus += example['entity_pages']['wiki_context']
-        if (i + 1) % 10000 == 0:
-            print('Added wiki docs from {} out of {} examples'.format(i + 1, n))
-    print('Fitting TF-IDF vectorizer')
-    tfidf.fit(token_corpus)
+    total = len(dataset)
+    print('Adding corpus documents...\n')
+    for examples in tqdm(dataset, total = total):
+        for example in examples['context']:
+            token_corpus += [clean_text(' '.join(example[1]))]
+                
+    if args.use_sklearn:
+        tfidf = TfidfVectorizer(stop_words='english', min_df=2)
+        print('Fitting scikit-learn TF-IDF vectorizer')
+        tfidf.fit(token_corpus)
+        out_fn = source + '/tf_idf_vectorizer_sklearn.pk'
+        print('Saving vectorizer to {}'.format(out_fn))
+        with open(out_fn, 'wb') as fd:
+            pickle.dump(tfidf, fd)
+    else:
+        tfidf = TfidfHommade()
+        print('Fitting homemade TF-IDF vectorizer')
+        tfidf.fit(token_corpus)
+        out_fn = source + '/tf_idf_vectorizer_hommade.pk'
+        print('Saving vectorizer to {}'.format(out_fn))
+        with open(out_fn, 'wb') as fd:
+            pickle.dump(tfidf, fd)
 
-    out_fn = 'trivia_qa/tf_idf_vectorizer.pk'
-    print('Saving vectorizer to {}'.format(out_fn))
-    with open('../data/trivia_qa/tf_idf_vectorizer.pk', 'wb') as fd:
-        pickle.dump(tfidf, fd)

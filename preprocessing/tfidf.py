@@ -10,7 +10,6 @@ from collections import Counter
 import json
 import time
 
-
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer 
@@ -18,7 +17,6 @@ import numpy as np
 import re
 import string
 from sklearn.feature_extraction.text import TfidfVectorizer
-import string
 from tqdm import tqdm
 
 
@@ -36,7 +34,7 @@ def clean_text(text, ignore_paranthesis = True):
         return text.lower()
     
 
-class tf_idf:
+class TfidfHommade:
     
     def __init__(self):
         self.idf = defaultdict(int)
@@ -79,6 +77,7 @@ class tf_idf:
         tf_idf_y_intersection /= np.sqrt(np.dot(tf_idf_y, tf_idf_y))
         return self.cosine_sim(tf_idf_x_intersection, tf_idf_y_intersection)
                                 
+        
     def calc_tf(self, x, unique):
         tf = Counter(x)
         return np.asarray([tf[word] for word in unique]) / len(x)
@@ -110,7 +109,7 @@ if __name__ == '__main__':
             
     documents = [clean_text(text) for text in token_corpus]
     
-    a = ['see me walking down fifth avenue', 'a walking cane here at my side']
+    a = ['england is in uk', 'uk includes england']
     
     print('Fitting TF-IDF vectorizer')
     tfidf = tf_idf()
@@ -122,7 +121,7 @@ if __name__ == '__main__':
     ourtf = []
     theirtf = []
     
-    for i in tqdm(range(100000)):
+    for i in tqdm(range(100)):
         
         t0 = time.time()
         tfidf.similarity(a[0], a[1])
