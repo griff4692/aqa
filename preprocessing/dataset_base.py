@@ -71,11 +71,17 @@ class HotpotQA(DatasetBase):
     def __init__(self):
         super().__init__('hotpot_qa')
 
-    def get_context_kv_pairs(self, type):
+    def get_context_kv_pairs(self, type, skip_keys=[]):
         keys, texts = [], []
-        for example in self[type]:
+        examples = self[type]
+        for example in examples:
             for context in example['context']:
                 k, v = context[0], unicodedata.normalize('NFKD', ' '.join(context[1]))
+
+                if k in skip_keys:
+                    print('Skipping {}'.format(k))
+                    continue
+
                 if k not in keys:  # there are duplicate passages with same context
                     keys.append(k)
                     # Given as list of sentences.  need one passage for proper coref resolution
@@ -109,7 +115,6 @@ class TriviaQA(DatasetBase):
     def _extract_contexts(self, example):
         keys = []
         texts = []
-
         for title, text in zip(example['entity_pages']['title'], example['entity_pages']['wiki_context']):
             k = '{}_{}'.format('wiki', title)
             keys.append(k)
@@ -122,22 +127,27 @@ class TriviaQA(DatasetBase):
 
         return list(zip(keys, texts))
 
-    def extract_contexts(self, type):
+    def extract_contexts(self, type, skip_keys=[]):
         d = {}
-        for i, example in enumerate(self[type]):
+        examples = self[type]
+        for i, example in enumerate(examples):
             contexts = self._extract_contexts(example)
             for k, v in contexts:
+                if k in skip_keys:
+                    print('Skipping {}'.format(k))
+                    continue
+
                 if k in d:
                     assert v == d[k]
                 else:
                     d[k] = v
-            if (i + 1) % 10000 == 0 or (i + 1) == len(self[type]):
+            if (i + 1) % 10000 == 0 or (i + 1) == len(examples):
                 print('Loaded contexts for {} examples.'.format(i + 1))
         print('Unique documents={}'.format(len(d)))
         return d
 
-    def get_context_kv_pairs(self, type):
-        return dict_to_lists(self.extract_contexts(type))
+    def get_context_kv_pairs(self, type, skip_keys=[]):
+        return dict_to_lists(self.extract_contexts(type, skip_keys=skip_keys))
 
     def get_train(self):
         return self.cached_dataset['train']
