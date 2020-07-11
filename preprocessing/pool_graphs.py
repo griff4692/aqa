@@ -119,7 +119,6 @@ def build_graph(item, graph, tf_idf):
 
 
 if __name__ == '__main__':
-
     print('Loading tf-idf vectorizer...')
     with open('trivia_qa/tf_idf_vectorizer.pk', 'rb') as fd:
         tf_idf = pickle.load(fd)
