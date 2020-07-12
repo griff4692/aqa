@@ -1,35 +1,31 @@
 # -*- coding: utf-8 -*-
 """
+
 Created on Sun Jul 12 11:26:03 2020
 
 @author: Mert Ketenci
+
+Batcher and preprocess in one method
+
 """
 import argparse
+from collections import defaultdict
+from itertools import chain
 import json
+from operator import itemgetter
+from random import random
 
 import numpy as np
 from transformers import AlbertTokenizer, AlbertConfig, AlbertForMaskedLM
 
+from utils import *
+
 configuration = AlbertConfig()
 tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
+        
 
-
-def flat_integer_list(nested_integer_list):
-    x = []
-    for i in nested_integer_list:
-        x = x + i
-    return x
-
-
-def find_sub_list(sl,l):
-    sll=len(sl)
-    for ind in (i for i,e in enumerate(l) if e==sl[0]):
-        if l[ind:ind+sll]==sl:
-            return ind,ind+sll-1
-
-
-class DataPreprocessor:
-    def __init__(self, dataset, pretraining_input_size = 30000):
+class Generator:
+    def __init__(self, dataset, train_test_split):
                 
         if dataset == 'hotpot':
             self.dataset = dataset
@@ -37,83 +33,130 @@ class DataPreprocessor:
             self.dataset = dataset
         else:
             sys.exit('dataset arg should be hotpot or trivia')
-            
-        self.tokenized_context_list = []
-        self.tokenized_question_list = []
-        self.tokenized_answer_list = []
-        self.mask_attention_list = []
-        self.pretraining_input_size = pretraining_input_size
         
-    def preprocess(self, train_data):
+        self.train_test_split = train_test_split
+        self.tokenized_context_list = defaultdict(list)
+        self.tokenized_question_list = defaultdict(list)
+        self.tokenized_answer_list = defaultdict(list)
+        self.input_array = defaultdict(list)
+        self.output_array = defaultdict(list)        
+    
+    def preprocess(self, data):
+          
+        output_list = defaultdict(list)
+        input_list = defaultdict(list)
+        n_example = defaultdict(list)
         
-        n_examples = len(train_data)
-        
-        output_list = []
+        n_example['total'] = len(data)
         
         if self.dataset == 'hotpot':
-            for train_datum in train_data:
+            for datum in data:
                 
-                contexts = train_datum['context']
-                
-                question = train_datum['question']
-                current_tokenized_question = tokenizer.encode(question)
-                
-                answer = train_datum['answer']
-                current_tokenized_answer = tokenizer.encode(answer)
-                
-                context_list = []
-                allowable_context_length = self.pretraining_input_size - len(current_tokenized_question[1:]) - 1
+                if random() > self.train_test_split:
+                    dtype = 'train'
+                else:
+                    dtype = 'test'
+                    
+                contexts = datum['context']
+                question = datum['question']                
+                answer = datum['answer']
                 
                 current_tokenized_context_list = []
-                current_context_length = 0
                 for context in contexts:
                     current_context = ''.join(context[-1])
                     current_tokenized_context = tokenizer.encode(current_context)
-                    current_context_length += len(current_tokenized_context)
-                    # if current_context_length <= allowable_context_length:
-                    current_tokenized_context_list.append(current_tokenized_context[1:-1])
-                    # else:
-                    #     break
-                
+                    current_tokenized_context_list.append(current_tokenized_context[1:-1])           
                 
                 current_tokenized_context_list = flat_integer_list(current_tokenized_context_list)
+                current_tokenized_question = tokenizer.encode(question)
+                current_tokenized_answer = tokenizer.encode(answer)
                 
-                self.tokenized_context_list.append(current_tokenized_context_list)
-                self.tokenized_answer_list.append(current_tokenized_answer)
-                self.tokenized_question_list.append(current_tokenized_question)
+                self.tokenized_context_list[dtype].append(current_tokenized_context_list)
+                self.tokenized_answer_list[dtype].append(current_tokenized_answer)
+                self.tokenized_question_list[dtype].append(current_tokenized_question)
                 
-                output_list.append(find_sub_list(current_tokenized_answer[1:-1], current_tokenized_context_list))
-                
-            input_list = [x + y + ['3'] for (x, y) in zip(self.tokenized_question_list, self.tokenized_context_list)]
-                        
-            self.input_array = np.zeros((n_examples, self.pretraining_input_size), dtype = np.int16)
-            for i in range(n_examples):
-                token_size = len(input_list[i])
-                self.input_array[i,:token_size] = input_list[i]
-                
-            self.output_array = np.asarray(output_list)
+                output_list[dtype].append(find_sub_list(current_tokenized_answer[1:-1], current_tokenized_context_list))
             
-    def get_tokenized_context_list(self):
-        return [['2'] + x + ['3'] for x in  self.tokenized_context_list]
+            count = defaultdict(int)
+            for dtype in ['train','test']:
+                input_list[dtype] = [x + y + ['3'] for (x, y) in zip(self.tokenized_question_list[dtype], 
+                                                                     self.tokenized_context_list[dtype])]
+                count[dtype] = max([len(x) for x in input_list[dtype]])
+                n_example[dtype] = len(input_list[dtype])
+                
+            for dtype in ['train','test']:
+                self.input_array[dtype] = np.zeros((n_example[dtype] + 1, count[dtype]), dtype = np.int16)
+                for i in range(n_example[dtype]):
+                    token_size = len(input_list[dtype][i])
+                    self.input_array[dtype][i,:token_size] = input_list[dtype][i]
+            
+                self.output_array[dtype] = np.asarray(output_list[dtype])
+            
+    def get_tokenized_context_list(self, ids, dtype, decode = False):
+        
+        """
+        returns [CLS] context tokens [SEP] for training set if dtype = train and decode = False
+        returns [CLS] context phrase [SEP] for training set if dtype = train and decode = True
+        """
+        
+        tokenized_context_list = itemgetter(*ids)([['2'] + x + ['3'] for x in self.tokenized_context_list[dtype]])
+        if decode:
+            return [tokenizer.decode(x) for x in tokenized_context_list]
+        else:
+            return tokenized_context_list
     
-    def get_tokenized_question_list(self):
-        return self.tokenized_question_list
+    def get_tokenized_question_list(self, ids, dtype, decode = False):
+        
+        """
+        returns [CLS] question tokens [SEP] for training set if dtype = train and decode = False
+        returns [CLS] question phrase [SEP] for training set if dtype = train and decode = True
+        """
+        
+        tokenized_question_list = itemgetter(*ids)(self.tokenized_question_list[dtype])
+        if decode:
+            return [tokenizer.decode(x) for x in tokenized_question_list]
+        else:
+            return tokenized_question_list
     
-    def get_tokenized_answer_list(self):
-        return self.tokenized_answer_list
+    def get_tokenized_answer_list(self, ids, dtype, decode = False):
+        
+        """
+        returns [CLS] answer tokens [SEP] for training set if dtype = train and decode = False
+        returns [CLS] answer phrase [SEP] for training set if dtype = train and decode = True
+        """
+        
+        tokenized_answer_list = itemgetter(*ids)(self.tokenized_answer_list[dtype])
+        if decode:
+            return [tokenizer.decode(x) for x in tokenized_answer_list]
+        else:
+            return tokenized_answer_list
     
-    def get_mask_attention_list(self):
-        return self.mask_attention_list
+    def get_x(self, ids, dtype, decode = False):
+        
+        """
+        returns [CLS] question tokens [SEP] context tokens [CLS] for training set if dtype = train and decode = False
+        returns [CLS] question phrase [SEP] context phrase [CLS] for training set if dtype = train and decode = True
+        """
+        
+        input_array = self.input_array[dtype][ids]
+        if decode: 
+            return [tokenizer.decode(x) for x in input_array]
+        else:
+            return input_array
     
-    def get_x_train(self, ids):
-        return self.input_array[ids]
-    
-    def get_y_train(self, ids):
-        return self.output_array[ids]
+    def get_y(self, ids, dtype):
+        
+        """
+        returns <BEG> <END> of answer (span) with respect to context for training set if dtype = train
+        """        
+
+        output_array = self.output_array[dtype][ids]
+        return output_array
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Build the graph.')
-    parser.add_argument('-dataset', default= 'hotpot', help='qa dataset')
+    parser.add_argument('-dataset', default = 'hotpot', help = 'qa dataset')
+    parser.add_argument('-train_test_split', default = 0.2, help = 'qa dataset')
     args = parser.parse_args()
     
     print('Loading dataset...')
@@ -121,7 +164,7 @@ if __name__ == '__main__':
     with open(input_fn) as f:
         dataset = json.load(f)     
     
-    training_preprocessor = DataPreprocessor(args.dataset)
-    training_preprocessor.preprocess(dataset[:20])
+    generator = Generator(args.dataset, args.train_test_split)
+    generator.preprocess(dataset)
     
 
