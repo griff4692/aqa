@@ -7,6 +7,8 @@ Created on Sun Jul 12 11:26:03 2020
 
 Batcher and preprocess in one method
 
+ToDos : add x_token_type_ids
+
 """
 import argparse
 from collections import defaultdict
@@ -153,10 +155,19 @@ class Generator:
         output_array = self.output_array[dtype][ids]
         return output_array
     
+    def get_size(self, dtype):
+        
+        """
+        returns number of examples in training / test sets
+        """ 
+        
+        return n_example[dtype] + 1
+       
+    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Build the graph.')
-    parser.add_argument('-dataset', default = 'hotpot', help = 'qa dataset')
-    parser.add_argument('-train_test_split', default = 0.2, help = 'qa dataset')
+    parser.add_argument('-dataset', default = 'hotpot', help = 'question answering dataset')
+    parser.add_argument('-train_test_split', default = 0.2, help = 'qusetion answering dataset')
     args = parser.parse_args()
     
     print('Loading dataset...')
