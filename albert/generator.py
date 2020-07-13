@@ -44,10 +44,8 @@ from utils import *
 
 logging.getLogger("transformers.tokenization_utils").setLevel(logging.ERROR)
 
-configuration = AlbertConfig()
 tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         
-
 path = os.path.join(Path(os.path.dirname(__file__)))
 os.chdir(path)
 
