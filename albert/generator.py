@@ -7,25 +7,52 @@ Created on Sun Jul 12 11:26:03 2020
 
 Generator object : preprocessor and the kernel of the batcher
 
+Note : We are already padding the tokens (ex : set get_tokenized_context_list(decode = True) to see the padded input)
+Therefore, we are not going to build the attention_mask variable
+see : https://stackoverflow.com/questions/60397610/use-of-attention-mask-during-the-forward-pass-in-lm-finetuning
+
+ToDos : 
+    
+    (A) Discuss how to approach large context size : 
+    
+    (1) Many of the context @ hotpot dataset does not contain the answer in it.
+    Shall we still use them?
+    (2) Let's use sequence window?
+    
+    (B) Discuss how to approach reasoning questions (yes / no)
+    
+    (1) Are we only going to use factoidal question / answer pairs?
+    
+
 """
+
 import argparse
 from collections import defaultdict
 from itertools import chain
 import json
 from operator import itemgetter
+import glob, os
+from pathlib import Path
+import pickle
 from random import random
 
 import numpy as np
-from transformers import AlbertTokenizer, AlbertConfig, AlbertForMaskedLM
+from transformers import AlbertTokenizer, logging
+from tqdm import tqdm
 
 from utils import *
+
+logging.getLogger("transformers.tokenization_utils").setLevel(logging.ERROR)
 
 configuration = AlbertConfig()
 tokenizer = AlbertTokenizer.from_pretrained('albert-base-v2')
         
 
+path = os.path.join(Path(os.path.dirname(__file__)))
+os.chdir(path)
+
 class Generator:
-    def __init__(self, dataset, train_test_split):
+    def __init__(self, dataset, train_test_split, len_max_seq):
                 
         if dataset == 'hotpot':
             self.dataset = dataset
@@ -35,6 +62,7 @@ class Generator:
             sys.exit('dataset arg should be hotpot or trivia')
         
         self.train_test_split = train_test_split
+        self.len_max_seq = len_max_seq
         
         self.tokenized_context_list = defaultdict(list)
         self.tokenized_question_list = defaultdict(list)
@@ -54,7 +82,7 @@ class Generator:
         
         self.n_example['total'] = len(data)
         if self.dataset == 'hotpot':
-            for datum in data:
+            for datum in tqdm(data, total = self.n_example['total']):
                 
                 if random() > self.train_test_split:
                     dtype = 'train'
@@ -65,21 +93,30 @@ class Generator:
                 question = datum['question']                
                 answer = datum['answer']
                 
-                current_tokenized_context_list = []
+                tokenized_context = []
                 for context in contexts:
-                    current_context = ''.join(context[-1])
-                    current_tokenized_context = tokenizer.encode(current_context)
-                    current_tokenized_context_list.append(current_tokenized_context[1:-1])           
+                    context = ''.join(context[-1])
+                    if find_sub_list(answer,context) != None:
+                        current_tokenized_context = tokenizer.encode(context)
+                        tokenized_context.append(current_tokenized_context[1:-1])         
+                    else:
+                        pass
+                    
+                tokenized_context = flat_integer_list(tokenized_context)
                 
-                current_tokenized_context_list = flat_integer_list(current_tokenized_context_list)
-                current_tokenized_question = tokenizer.encode(question)
-                current_tokenized_answer = tokenizer.encode(answer)
+                tokenized_question = tokenizer.encode(question)
+                tokenized_answer = tokenizer.encode(answer)
+                answer_span = find_sub_list(tokenized_answer[1:-1], tokenized_context)
                 
-                self.tokenized_context_list[dtype].append(current_tokenized_context_list)
-                self.tokenized_answer_list[dtype].append(current_tokenized_answer)
-                self.tokenized_question_list[dtype].append(current_tokenized_question)
-                
-                output_list[dtype].append(find_sub_list(current_tokenized_answer[1:-1], current_tokenized_context_list))
+                if answer_span != None:
+                    c_len = len(tokenized_context)
+                    q_len = len(tokenized_question)
+                    
+                    if c_len + q_len <= self.len_max_seq:   
+                        self.tokenized_context_list[dtype].append(tokenized_context)
+                        self.tokenized_answer_list[dtype].append(tokenized_answer)
+                        self.tokenized_question_list[dtype].append(tokenized_question)
+                        output_list[dtype].append(answer_span)
             
             count = defaultdict(int)
             for dtype in ['train','test']:
@@ -178,18 +215,20 @@ class Generator:
        
     
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Build the graph.')
+    parser = argparse.ArgumentParser('Build the generator.')
     parser.add_argument('-dataset', default = 'hotpot', help = 'question answering dataset')
-    parser.add_argument('-train_test_split', default = 0.2, help = 'qusetion answering dataset')
+    parser.add_argument('-len_max_seq', default = 512, help = 'maximum sequence length')
+    parser.add_argument('-train_test_split', default = 0.2, help = 'train / test split ratio')
     args = parser.parse_args()
     
     print('Loading dataset...')
     input_fn = '../data/hotpot_qa/hotpot_train_v1.1.json'
     with open(input_fn) as f:
-        dataset = json.load(f)     
-    
-    generator = Generator(args.dataset, args.train_test_split)
-    generator.preprocess(dataset)
+        dataset = json.load(f)
+        
+    print('Building generator...\n')
+    generator = Generator(args.dataset, args.train_test_split, args.len_max_seq)
+    generator.preprocess(dataset[:1000])
     
     print('Saving...')
     output_fn = '../data/hotpot_qa/generator.pk'
