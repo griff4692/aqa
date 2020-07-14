@@ -62,6 +62,8 @@ class Generator:
         self.train_test_split = train_test_split
         self.max_pos = max_pos
         
+        self.n_example = defaultdict(list)
+
         self.tokenized_context_list = defaultdict(list)
         self.tokenized_question_list = defaultdict(list)
         self.tokenized_answer_list = defaultdict(list)
@@ -76,7 +78,6 @@ class Generator:
         input_list = defaultdict(list)
         
         n_question = defaultdict(list)
-        self.n_example = defaultdict(list)
         
         self.n_example['total'] = len(data)
         if self.dataset == 'hotpot':
