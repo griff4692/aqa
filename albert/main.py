@@ -21,12 +21,13 @@ path = os.path.join(Path(os.path.dirname(__file__)).parent)
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('main script to train alber qa model')
+    parser = argparse.ArgumentParser('Main script to train alber qa model')
     
     parser.add_argument('-n_epoch',default = 600)    
     parser.add_argument('-batch_size',default = 1)
     parser.add_argument('-lr',default = 1e-10)
     parser.add_argument('-device',default = 'cuda')
+    parser.add_argument('-max_pos',default = 4096)
     
     args = parser.parse_args()
         
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     
     batcher = Batcher(train_size, test_size, args.batch_size, args.device)
     
-    model = AlbertQAModel().to(args.device)
+    model = AlbertQAModel(args.max_pos).to(args.device)
     
     trainable_params = filter(lambda x: x.requires_grad, model.parameters())
     optimizer = torch.optim.Adam(trainable_params, lr = args.lr)

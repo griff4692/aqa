@@ -50,7 +50,7 @@ path = os.path.join(Path(os.path.dirname(__file__)))
 os.chdir(path)
 
 class Generator:
-    def __init__(self, dataset, train_test_split, len_max_seq):
+    def __init__(self, dataset, train_test_split, max_pos):
                 
         if dataset == 'hotpot':
             self.dataset = dataset
@@ -60,7 +60,7 @@ class Generator:
             sys.exit('dataset arg should be hotpot or trivia')
         
         self.train_test_split = train_test_split
-        self.len_max_seq = len_max_seq
+        self.max_pos = max_pos
         
         self.tokenized_context_list = defaultdict(list)
         self.tokenized_question_list = defaultdict(list)
@@ -105,21 +105,17 @@ class Generator:
                 tokenized_question = tokenizer.encode(question)
                 tokenized_answer = tokenizer.encode(answer)
                 answer_span = find_sub_list(tokenized_answer[1:-1], tokenized_context)
-                
                 if answer_span != None:
-                    c_len = len(tokenized_context)
-                    q_len = len(tokenized_question)
-                    
-                    if c_len + q_len <= self.len_max_seq:   
-                        self.tokenized_context_list[dtype].append(tokenized_context)
-                        self.tokenized_answer_list[dtype].append(tokenized_answer)
-                        self.tokenized_question_list[dtype].append(tokenized_question)
-                        output_list[dtype].append(answer_span)
+                    self.tokenized_context_list[dtype].append(tokenized_context)
+                    self.tokenized_answer_list[dtype].append(tokenized_answer)
+                    self.tokenized_question_list[dtype].append(tokenized_question)
+                    output_list[dtype].append(answer_span)
             
             count = defaultdict(int)
             for dtype in ['train','test']:
                 input_list[dtype] = [x + y + ['3'] for (x, y) in zip(self.tokenized_question_list[dtype], 
                                                                      self.tokenized_context_list[dtype])]
+                
                 n_question[dtype] = [len(x) for x in self.tokenized_question_list[dtype]]
                                                                                     
                 count[dtype] = max([len(x) for x in input_list[dtype]])
@@ -226,7 +222,7 @@ if __name__ == '__main__':
         
     print('Building generator...\n')
     generator = Generator(args.dataset, args.train_test_split, args.len_max_seq)
-    generator.preprocess(dataset[:1000])
+    generator.preprocess(dataset)
     
     print('Saving...')
     output_fn = '../data/hotpot_qa/generator.pk'
