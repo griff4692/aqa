@@ -1,16 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-
 Created on Sun Jul 12 11:26:03 2020
-
 @author: Mert Ketenci
-
 Generator object : preprocessor and the kernel of the batcher
-
 Note : We are already padding the tokens (ex : set get_tokenized_context_list(decode = True) to see the padded input)
 Therefore, we are not going to build the attention_mask variable
 see : https://stackoverflow.com/questions/60397610/use-of-attention-mask-during-the-forward-pass-in-lm-finetuning
-
 ToDos : 
     
     (A) Discuss how to approach large context size : 
@@ -23,7 +18,6 @@ ToDos :
     
     (1) Are we only going to use factoidal question / answer pairs?
     
-
 """
 
 import argparse
@@ -62,8 +56,6 @@ class Generator:
         self.train_test_split = train_test_split
         self.max_pos = max_pos
         
-        self.n_example = defaultdict(list)
-
         self.tokenized_context_list = defaultdict(list)
         self.tokenized_question_list = defaultdict(list)
         self.tokenized_answer_list = defaultdict(list)
@@ -78,6 +70,7 @@ class Generator:
         input_list = defaultdict(list)
         
         n_question = defaultdict(list)
+        self.n_example = defaultdict(list)
         
         self.n_example['total'] = len(data)
         if self.dataset == 'hotpot':
@@ -106,25 +99,29 @@ class Generator:
                 tokenized_question = tokenizer.encode(question)
                 tokenized_answer = tokenizer.encode(answer)
                 answer_span = find_sub_list(tokenized_answer[1:-1], tokenized_context)
+                
                 if answer_span != None:
-                    self.tokenized_context_list[dtype].append(tokenized_context)
-                    self.tokenized_answer_list[dtype].append(tokenized_answer)
-                    self.tokenized_question_list[dtype].append(tokenized_question)
-                    output_list[dtype].append(answer_span)
+                    c_len = len(tokenized_context)
+                    q_len = len(tokenized_question)
+                    
+                    if c_len + q_len <= self.max_pos:
+                        self.tokenized_context_list[dtype].append(tokenized_context)
+                        self.tokenized_answer_list[dtype].append(tokenized_answer)
+                        self.tokenized_question_list[dtype].append(tokenized_question)
+                        output_list[dtype].append(answer_span)
             
             count = defaultdict(int)
             for dtype in ['train','test']:
                 input_list[dtype] = [x + y + ['3'] for (x, y) in zip(self.tokenized_question_list[dtype], 
                                                                      self.tokenized_context_list[dtype])]
-                
                 n_question[dtype] = [len(x) for x in self.tokenized_question_list[dtype]]
                                                                                     
                 count[dtype] = max([len(x) for x in input_list[dtype]])
                 self.n_example[dtype] = len(input_list[dtype])
                 
             for dtype in ['train','test']:
-                self.input_array[dtype] = np.zeros((self.n_example[dtype], count[dtype]), dtype = np.int16)
-                self.token_type_array[dtype] = np.zeros((self.n_example[dtype], count[dtype]), dtype = np.int8)
+                self.input_array[dtype] = np.zeros((self.n_example[dtype], self.max_pos), dtype = np.int16)
+                self.token_type_array[dtype] = np.zeros((self.n_example[dtype], self.max_pos), dtype = np.int8)
                 for i in range(self.n_example[dtype]):
                     token_size = len(input_list[dtype][i])
                     self.input_array[dtype][i,:token_size] = input_list[dtype][i]
@@ -207,13 +204,20 @@ class Generator:
         """ 
         
         return self.n_example[dtype]
-       
+      
+    def get_pos(self):
+        
+        """
+        returns maximum number of positional embeddings
+        """ 
+        
+        return self.max_pos
     
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Build the generator.')
     parser.add_argument('-dataset', default = 'hotpot', help = 'question answering dataset')
-    parser.add_argument('-len_max_seq', default = 512, help = 'maximum sequence length')
-    parser.add_argument('-train_test_split', default = 0.2, help = 'train / test split ratio')
+    parser.add_argument('-max_pos', default = 512, help = 'maximum sequence length')
+    parser.add_argument('-split', default = 0.2, help = 'train / test split ratio')
     args = parser.parse_args()
     
     print('Loading dataset...')
@@ -222,12 +226,10 @@ if __name__ == '__main__':
         dataset = json.load(f)
         
     print('Building generator...\n')
-    generator = Generator(args.dataset, args.train_test_split, args.len_max_seq)
-    generator.preprocess(dataset)
+    generator = Generator(args.dataset, args.split, args.max_pos)
+    generator.preprocess(dataset[:1000])
     
     print('Saving...')
     output_fn = '../data/hotpot_qa/generator.pk'
     with open(output_fn, 'wb') as fd:
          pickle.dump(generator, fd, protocol=4)
-    
-
