@@ -25,7 +25,7 @@ class AlbertQAModel(nn.Module):
             self.encoder = AlbertModel.from_pretrained('albert-base-v2')
             
         hidden_size = self.encoder.encoder.embedding_hidden_mapping_in.out_features
-        
+
         self.start_logits = nn.Linear(max_pos * hidden_size, max_pos, bias = True)
         self.end_logits = nn.Linear(max_pos * hidden_size, max_pos, bias = True)
         
@@ -35,13 +35,14 @@ class AlbertQAModel(nn.Module):
         if is_train:
             embeddings = self.encoder(x_train, token_type_ids = token_type)[0]
             embeddings = Flatten()(embeddings)
-            
+
             beg = self.start_logits(embeddings)
             end = self.end_logits(embeddings)
             
             loss_beg = cross_entropy(beg, y_train[:,0])
             loss_end = cross_entropy(end, y_train[:,1])
-            return loss_beg + loss_end
+            loss = loss_beg + loss_end
+            return loss.mean()
         else:
             embeddings = self.encoder(x_test, token_type_ids = token_type)[0]
             embeddings = Flatten()(embeddings)

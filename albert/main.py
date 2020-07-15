@@ -17,29 +17,26 @@ from generator import Generator
 from batcher import Batcher
 from model import AlbertQAModel
 
-path = os.path.join(Path(os.path.dirname(__file__)).parent)
-
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Main script to train alber qa model')
     
     parser.add_argument('-n_epoch',default = 600)    
-    parser.add_argument('-train_batch_size',default = 2)
-    parser.add_argument('-test_batch_size',default = 2)
+    parser.add_argument('-train_batch_size',default = 3)
+    parser.add_argument('-test_batch_size',default = 3)
     parser.add_argument('-lr',default = 1e-10)
-    parser.add_argument('-device',default = 'cpu')
+    parser.add_argument('-device',default = 'cuda')
     
     args = parser.parse_args()
-        
+
     print('Loading the generator...')
-    with open(path + '/data/hotpot_qa/generator.pk', 'rb') as fd:
+    with open('../data/hotpot_qa/generator.pk', 'rb') as fd:
         generator = pickle.load(fd)
-        
+
     train_size = generator.get_size('train')
     test_size = generator.get_size('test')
     max_pos = generator.get_pos()
-    
-    
+
     batcher = Batcher(train_size, test_size, args.train_batch_size, args.test_batch_size, args.device)
     
     model = AlbertQAModel(max_pos).to(args.device)
@@ -53,7 +50,8 @@ if __name__ == '__main__':
     train_loss = []
     test_loss = []
     exact_match_list = []
-    
+    epoch_exact_match_list = []
+
     model.train()
     batcher.reset()
     beta = 0
@@ -77,7 +75,7 @@ if __name__ == '__main__':
 
             exact_match_list.append(exact_match)
         
-        epoch.exact_match_list.append(np.mean(exact_match_list))
+        epoch_exact_match_list.append(np.mean(exact_match_list))
         
         model.train()
         batcher.reset()

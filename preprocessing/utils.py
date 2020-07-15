@@ -57,3 +57,17 @@ def clean_text(text, ignore_paranthesis = True):
         text = text.translate(str.maketrans('', '', string.punctuation))
         text = ' '.join(text.split())
         return text.lower()
+
+def overlap(a, b, tf_idf_sk):
+    feats = tf_idf_sk.transform([a.lower(), b.lower()])
+    return (feats[0, :] * feats[1, :].T).todense()[0, 0]
+
+
+def clean_text(text, ignore_paranthesis = True):
+    if text!=None:
+        if ignore_paranthesis:
+            text = re.sub("[\(\[].*?[\)\]]", "", text)
+        text = text.translate(str.maketrans('', '', string.punctuation))
+        text = ' '.join(text.split())
+        return text.lower()
+    

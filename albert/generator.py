@@ -104,7 +104,7 @@ class Generator:
                     c_len = len(tokenized_context)
                     q_len = len(tokenized_question)
                     
-                    if c_len + q_len <= self.max_pos:
+                    if c_len + q_len + 1 <= self.max_pos:
                         self.tokenized_context_list[dtype].append(tokenized_context)
                         self.tokenized_answer_list[dtype].append(tokenized_answer)
                         self.tokenized_question_list[dtype].append(tokenized_question)
@@ -227,7 +227,7 @@ if __name__ == '__main__':
         
     print('Building generator...\n')
     generator = Generator(args.dataset, args.split, args.max_pos)
-    generator.preprocess(dataset[:1000])
+    generator.preprocess(dataset)
     
     print('Saving...')
     output_fn = '../data/hotpot_qa/generator.pk'
