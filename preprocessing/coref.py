@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 import neuralcoref
 import spacy
 import torch
+from tqdm import tqdm
 
 from dataset_base import dataset_factory
 from utils import duration, remove_extra_space
@@ -74,11 +75,10 @@ def dump_chunk(dict, out_dir):
     print('Now has {} items. Time to get more!'.format(len(dict)))
 
 
-def process_context(input, lock=None, ctr=None, out_dir=None, outputs=None):
+def process_context(input, lock=None, out_dir=None, outputs=None):
     """
     :param t: context string
     :param lock: multiprocessing Lock
-    :param ctr: context counter (for displaying progress in multiprocessing mode)
     :return: a dictionary consisting of 'context', 'clusters', 'resolved' where 'context' is the original text,
     and 'resolved' is the output of replacing coreferent entity 'clusters' with their head (canonical) term.
     """
@@ -86,15 +86,9 @@ def process_context(input, lock=None, ctr=None, out_dir=None, outputs=None):
     coref_obj = construct_coref(t)
     coref_obj['context'] = t
     with lock:
-        ctr.value += 1
         outputs[k] = coref_obj
-
         if len(outputs) == 1000:
             dump_chunk(outputs, out_dir)
-
-        if ctr.value % update_incr == 0:
-            print('Processed {} contexts...'.format(ctr.value))
-
     return coref_obj
 
 
@@ -114,10 +108,15 @@ def resolve_corefs(dataset, dtype, out_dir, preexisting_keys):
     with Manager() as manager:
         p = Pool(processes=10)
         lock = manager.Lock()
-        ctr = manager.Value('i', 0)
         outputs = manager.dict()
-        p.map(partial(process_context, lock=lock, ctr=ctr, outputs=outputs, out_dir=out_dir), zip(keys, texts))
-
+        for _ in tqdm(
+                p.imap_unordered(
+                    partial(process_context, lock=lock, outputs=outputs, out_dir=out_dir), zip(keys, texts)),
+                total=len(keys)
+        ):
+            pass
+        p.close()
+        p.join()
         if len(outputs) > 0:
             dump_chunk(outputs, out_dir)
 

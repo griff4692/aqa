@@ -21,8 +21,9 @@ def dict_to_lists(obj):
 def dataset_factory(name):
     if name == 'hotpot_qa':
         return HotpotQA()
-    else:
+    elif name == 'trivia_qa':
         return TriviaQA()
+    raise Exception('Didn\'t recognize dataset={}'.format(name))
 
 
 class DatasetBase:

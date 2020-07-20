@@ -19,7 +19,7 @@ import spacy
 from dataset_base import dataset_factory
 from utils import duration
 
-DIST_THRESHOLD = 0.3
+DIST_THRESHOLD = 0.2
 
 
 def tok_tup(tups):
@@ -54,8 +54,12 @@ def construct_graph(input, lock=None, ctr=None):
         nodes += [tup[0], tup[2]]
     node_counts = Counter(nodes)
     nodes_uniq = list(node_counts.keys())
-    inputs = tf_idf_vectorizer.transform(nodes_uniq)
 
+    if len(nodes_uniq) == 0:
+        print('{} id has no IE tuples'.format(qid))
+        return 'N/A'
+
+    inputs = tf_idf_vectorizer.transform(nodes_uniq)
     s = inputs.sum(1)
     zero_tf_idxs = np.where(s == 0)[0]
     nonzero_tf_idxs = np.where(s > 0)[0]
@@ -93,16 +97,19 @@ def construct_graph(input, lock=None, ctr=None):
         head_names[cluster] = head_name
 
     g = _construct_graph(oie_tuples_flat, node_assignments, cluster_assignments, cluster_counts, head_names)
+    out_fn = os.path.join(data_dir, 'chunks', '{}.pk'.format(qid))
+    print('Dumping knowledge graphs to {}'.format(out_fn))
+    with open(out_fn, 'wb') as fd:
+        pickle.dump(g, fd)
     with lock:
         ctr.value += 1
         if ctr.value % update_incr == 0:
             print('Processed {} contexts...'.format(ctr.value))
-
     return g
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('Generate raw sentences file for consumption by open IE 6.')
+    parser = argparse.ArgumentParser('Generate knowledge graphs from OIE6 output.')
     parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
@@ -118,8 +125,8 @@ if __name__ == '__main__':
     with open(tf_idf_fn, 'rb') as fd:
         tf_idf_vectorizer = pickle.load(fd)
 
-    update_incr = 10 if args.debug else 1
-    dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+    update_incr = 10 if args.debug else 100
+    dtypes = ['mini'] if args.debug else ['train']  # , 'test', 'validation']
     results = []
     for dtype in dtypes:
         start_time = time()
@@ -142,6 +149,7 @@ if __name__ == '__main__':
         print('Loading contexts...')
         id_context_map = dataset.get_linked_contexts(dtype).items()
         ids = [id[0] for id in id_context_map]
+        print('Starting to construct graphs...')
         with Manager() as manager:
             p = Pool()
             lock = manager.Lock()
@@ -156,3 +164,4 @@ if __name__ == '__main__':
         print('Dumping knowledge graphs to {}'.format(out_fn))
         with open(out_fn, 'wb') as fd:
             pickle.dump(graphs, fd)
+        print('Done!')
