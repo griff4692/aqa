@@ -1,13 +1,16 @@
 from collections import Counter, defaultdict
 from functools import partial
-from itertools import chain
+import itertools
 import json
 from multiprocessing import Manager, Pool
+import pandas as pd
 import pickle
 import os
+import shutil
 import sys
 from string import punctuation
 from time import time
+from tqdm import tqdm
 
 import argparse
 import networkx as nx
@@ -15,11 +18,21 @@ import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.metrics import pairwise_distances
 import spacy
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
+
+from torch.nn import DataParallel as DP
 
 from dataset_base import dataset_factory
 from utils import duration
 
-DIST_THRESHOLD = 0.2
+DIST_THRESHOLD = 0.3
+
+
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i: i + n]
 
 
 def tok_tup(tups):
@@ -27,12 +40,12 @@ def tok_tup(tups):
 
 
 def tokenize(str):
-    toks = [token.text.lower().strip(punctuation).strip() for token in spacy_nlp(str)]
+    toks = [token.text.lower().strip(punctuation).strip() for token in spacy_tokenizer(str)]
     return [tok for tok in toks if len(tok) > 0]
 
 
 def _construct_graph(oie_tuples, node_assignments, cluster_assignments, node_weights, head_names):
-    g = nx.MultiDiGraph()
+    g = nx.DiGraph()
     n = len(cluster_assignments)
     for i in range(n):
         g.add_node(i, head=head_names[i], aliases=cluster_assignments[i], weight=node_weights[i])
@@ -41,50 +54,75 @@ def _construct_graph(oie_tuples, node_assignments, cluster_assignments, node_wei
         u, e, v = tup
         u_node = node_assignments[u]
         v_node = node_assignments[v]
-        g.add_edge(u_node, v_node, name=e)
+
+        if u_node == v_node:
+            continue  # no self loops
+
+        if g.has_edge(u_node, v_node):
+            g.edges[u_node, v_node]['verbs'].add(e)
+            g.edges[v_node, u_node]['verbs'].add(e)
+        else:
+            e_set = set([e])
+            g.add_edge(u_node, v_node, u_name=u, v_name=v, verbs=e_set, back_edge=False)
+            g.add_edge(v_node, u_node, u_name=u, v_name=v, verbs=e_set, back_edge=True)
     return g
 
 
-def construct_graph(input, lock=None, ctr=None):
+def generate_pairs(n):
+    return itertools.combinations(range(n), r=2)
+
+
+def construct_graph(input, out_dir=None):
     qid, context_ids = input
     oie_tuples = [oie_data_tok[cid] for cid in context_ids]
-    oie_tuples_flat = list(chain(*oie_tuples))
+    oie_tuples_flat = list(itertools.chain(*oie_tuples))
+    oie_tuples_flat = [[x.strip() for x in tup] for tup in oie_tuples_flat]
     nodes = []
     for tup in oie_tuples_flat:
         nodes += [tup[0], tup[2]]
     node_counts = Counter(nodes)
-    nodes_uniq = list(node_counts.keys())
+    nodes_uniq = set(list(node_counts.keys()))
+
+    # add noun chunks with special 'subset' predicate relationship
+    for node in nodes_uniq.copy():
+        if len(node.split(' ')) > 1:
+            for chunk in chunker(node).noun_chunks:
+                chunk = chunk.string.strip()
+                if len(chunk) > 1:
+                    oie_tuples_flat.append([chunk, 'subset', node])
+                    nodes_uniq.add(chunk)
 
     if len(nodes_uniq) == 0:
         print('{} id has no IE tuples'.format(qid))
         return 'N/A'
 
-    inputs = tf_idf_vectorizer.transform(nodes_uniq)
-    s = inputs.sum(1)
-    zero_tf_idxs = np.where(s == 0)[0]
-    nonzero_tf_idxs = np.where(s > 0)[0]
+    nodes_uniq = list(nodes_uniq)
+    n = len(nodes_uniq)
+    mat_idxs = list(generate_pairs(n))
 
-    valid_nodes = [nodes_uniq[idx] for idx in nonzero_tf_idxs]
-    valid_inputs = inputs[nonzero_tf_idxs]
+    rs, cs = [], []
+    for r, c in mat_idxs:
+        rs.append(nodes_uniq[r])
+        cs.append(nodes_uniq[c])
 
-    invalid_nodes = [nodes_uniq[idx] for idx in zero_tf_idxs]
-    clusterizer = AgglomerativeClustering(n_clusters=None, affinity='cosine', distance_threshold=DIST_THRESHOLD,
+    sim_numbers = compute_sim(rs, cs)
+    dist_mat = np.ones([n, n], dtype=float)
+    assert len(sim_numbers) == len(mat_idxs)
+    for sim, (r, c) in zip(sim_numbers, mat_idxs):
+        dist_mat[r, c] = dist_mat[c, r] = 1.0 - sim
+
+    clusterizer = AgglomerativeClustering(n_clusters=None, affinity='precomputed', distance_threshold=DIST_THRESHOLD,
                                           linkage='average', compute_full_tree=True)
 
-    cluster_labels = clusterizer.fit_predict(valid_inputs.toarray())
+    cluster_labels = clusterizer.fit_predict(dist_mat)
     node_assignments = defaultdict(int)
-    max_label = 0
-    for node, label in zip(valid_nodes, cluster_labels):
+    for node, label in zip(nodes_uniq, cluster_labels):
         label = int(label)
         node_assignments[node] = label
-        max_label = max(max_label, label)
-    offset = max_label + 1
-    for idx in range(len(invalid_nodes)):
-        node_assignments[invalid_nodes[idx]] = idx + offset
+
     cluster_assignments = defaultdict(list)
     for node, cluster in node_assignments.items():
         cluster_assignments[cluster].append(node)
-
     cluster_counts = {}
     head_names = {}
     for cluster, names in cluster_assignments.items():
@@ -97,15 +135,34 @@ def construct_graph(input, lock=None, ctr=None):
         head_names[cluster] = head_name
 
     g = _construct_graph(oie_tuples_flat, node_assignments, cluster_assignments, cluster_counts, head_names)
-    out_fn = os.path.join(data_dir, 'chunks', '{}.pk'.format(qid))
-    print('Dumping knowledge graphs to {}'.format(out_fn))
+    out_fn = os.path.join(out_dir, '{}.pk'.format(qid))
+    output = {qid: g}
     with open(out_fn, 'wb') as fd:
-        pickle.dump(g, fd)
-    with lock:
-        ctr.value += 1
-        if ctr.value % update_incr == 0:
-            print('Processed {} contexts...'.format(ctr.value))
-    return g
+        pickle.dump(output, fd)
+    return qid, g
+
+
+def compute_sim(x, y):
+    input = list(zip(x, y))
+    results = []
+    batch_size = 200 * len(model.device_ids)
+    for chunk in chunks(input, batch_size):
+        x = [c[0] for c in chunk]
+        y = [c[1] for c in chunk]
+        batch_input = tokenizer(x, y, return_tensors='pt', max_length=20, padding='max_length', truncation=True
+                                ).to(f'cuda:{model.device_ids[0]}')
+        logits = model(**batch_input)[0]
+        batch_results = torch.softmax(logits, dim=1)[:, 1].tolist()
+        results += batch_results
+    return results
+
+
+def load_precomputed(out_dir, output):
+    for fn in os.listdir(out_dir):
+        chunk_in_fn = os.path.join(out_dir, fn)
+        with open(chunk_in_fn, 'rb') as fd:
+            o = pickle.load(fd)
+            output.update(o)
 
 
 if __name__ == '__main__':
@@ -117,16 +174,34 @@ if __name__ == '__main__':
 
     dataset = dataset_factory(args.dataset)
     print('Loading Spacy...')
-    spacy_nlp = spacy.load('en_core_web_lg', disable=['parser', 'ner', 'tagger', 'textcat'])
+    spacy_tokenizer = spacy.load('en_core_web_lg', disable=['parser', 'ner', 'tagger', 'textcat'])
+    chunker = spacy.load('en_core_web_lg')
 
     data_dir = os.path.join('..', 'data', dataset.name)
-    tf_idf_fn = os.path.join(data_dir, 'tf_idf_vectorizer.pk')
-    print('Loading TF-IDF vectorizer...')
-    with open(tf_idf_fn, 'rb') as fd:
-        tf_idf_vectorizer = pickle.load(fd)
+    tmp = []
+    print('Loading ALBERT...')
+
+    #  getting the list of GPUs available
+    if torch.cuda.is_available():
+        DEVICE = torch.device('cuda')
+        device_ids = list(range(torch.cuda.device_count()))
+        gpus = len(device_ids)
+        print('GPU detected')
+    else:
+        DEVICE = torch.device("cpu")
+        print('No GPU. switching to CPU')
+
+    model = 'textattack/albert-base-v2-MRPC'
+    tokenizer = AutoTokenizer.from_pretrained(model)
+    model = AutoModelForSequenceClassification.from_pretrained(model)
+    model = DP(model, device_ids=device_ids)
+    model.to(f'cuda:{model.device_ids[0]}')
+
+    print('Porting model to CUDA...')
+    model.eval()
 
     update_incr = 10 if args.debug else 100
-    dtypes = ['mini'] if args.debug else ['train']  # , 'test', 'validation']
+    dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
     results = []
     for dtype in dtypes:
         start_time = time()
@@ -148,20 +223,29 @@ if __name__ == '__main__':
 
         print('Loading contexts...')
         id_context_map = dataset.get_linked_contexts(dtype).items()
-        ids = [id[0] for id in id_context_map]
-        print('Starting to construct graphs...')
-        with Manager() as manager:
-            p = Pool()
-            lock = manager.Lock()
-            ctr = manager.Value('i', 0)
-            graphs = list(p.map(partial(construct_graph, lock=lock, ctr=ctr), id_context_map))
-            p.close()
-            p.join()
-        duration(start_time)
 
-        graphs = dict(zip(ids, graphs))
+        print('Starting to construct graphs...')
+        out_dir = os.path.join(data_dir, 'chunks', 'kg', dtype)
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+
+        output = {}
+        load_precomputed(out_dir, output)
+        already_n = len(output)
+
+        id_context_map_todo = [item for item in id_context_map if not item[0] in output]
+        n = len(id_context_map_todo)
+        print('Already computed {} outputs.  Doing {} more...'.format(already_n, n))
+        for i in tqdm(range(n)):
+            construct_graph(id_context_map_todo[i], out_dir=out_dir)
+        load_precomputed(out_dir, output)
+        duration(start_time)
         out_fn = os.path.join(data_dir, 'kg_{}.pk'.format(dtype))
-        print('Dumping knowledge graphs to {}'.format(out_fn))
+        print('Dumping {} knowledge graphs to {}'.format(len(output), out_fn))
         with open(out_fn, 'wb') as fd:
-            pickle.dump(graphs, fd)
-        print('Done!')
+            pickle.dump(output, fd)
+        print('Done!  Now can safely remove cached')
+        print('Removing temporary chunks...')
+        shutil.rmtree(out_dir)
+        os.mkdir(out_dir)
+

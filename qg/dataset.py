@@ -14,9 +14,7 @@ from kg import tokenize
 
 from networkx.algorithms.traversal.breadth_first_search import bfs_edges
 
-print('Loading Spacy...')
-spacy_nlp = spacy.load('en_core_web_lg')
-print('Finished loading Spacy...')
+T5_PREFIX = 'translate from Graph to Text:'
 
 
 def tokenize(str):
@@ -72,6 +70,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()
+
+    print('Loading Spacy...')
+    spacy_nlp = spacy.load('en_core_web_lg')
+    print('Finished loading Spacy...')
+
     dataset = dataset_factory(args.dataset)
     dataset = QGD(args.dataset, 'mini')
     for i in range(len(dataset)):

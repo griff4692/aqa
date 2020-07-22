@@ -1,9 +1,11 @@
 from collections import defaultdict
 from functools import partial
 import json
-from multiprocessing import Manager, Pool
+from multiprocessing import Pool
 import os
+import random
 import re
+import string
 from time import time
 
 import argparse
@@ -55,41 +57,21 @@ def collect(out_dir):
     output = {}
     for fn in existing_fns:
         with open(os.path.join(out_dir, fn), 'r') as fd:
-            output.update(json.load(fd))
+            dict = json.load(fd)
+            for k, v in dict.items():
+                output[k] = v
     return output
 
 
-def dump_chunk(dict, out_dir):
-    existing_fns = os.listdir(out_dir)
-    if len(existing_fns) == 0:
-        out_fn = os.path.join(out_dir, '0.json')
-    else:
-        nums = [int(x.split('.')[0]) for x in existing_fns]
-        out_fn = os.path.join(out_dir, '{}.json'.format(max(nums) + 1))
-
-    n = len(dict)
-    print('Dumping {} examples to {}'.format(n, out_fn))
-    with open(out_fn, 'w') as fd:
-        json.dump(dict.copy(), fd)
-    dict.clear()
-    print('Now has {} items. Time to get more!'.format(len(dict)))
-
-
-def process_context(input, lock=None, out_dir=None, outputs=None):
-    """
-    :param t: context string
-    :param lock: multiprocessing Lock
-    :return: a dictionary consisting of 'context', 'clusters', 'resolved' where 'context' is the original text,
-    and 'resolved' is the output of replacing coreferent entity 'clusters' with their head (canonical) term.
-    """
+def process_context(input, out_dir=None):
     k, t = input
     coref_obj = construct_coref(t)
     coref_obj['context'] = t
-    with lock:
-        outputs[k] = coref_obj
-        if len(outputs) == 1000:
-            dump_chunk(outputs, out_dir)
-    return coref_obj
+    output = {k: coref_obj}
+    rand = ''.join([random.choice(string.ascii_letters + string.digits) for _ in range(16)])
+    out_fn = os.path.join(out_dir, '{}.json'.format(rand))
+    with open(out_fn, 'w') as fd:
+        json.dump(output, fd)
 
 
 def resolve_corefs(dataset, dtype, out_dir, preexisting_keys):
@@ -104,21 +86,11 @@ def resolve_corefs(dataset, dtype, out_dir, preexisting_keys):
     """
     print('Loading {} set...'.format(dtype))
     keys, texts = dataset.get_context_kv_pairs(dtype, skip_keys=preexisting_keys)
+    n = len(keys)
     print('Processing {} contexts for {} set...'.format(len(keys), dtype))
-    with Manager() as manager:
-        p = Pool(processes=10)
-        lock = manager.Lock()
-        outputs = manager.dict()
-        for _ in tqdm(
-                p.imap_unordered(
-                    partial(process_context, lock=lock, outputs=outputs, out_dir=out_dir), zip(keys, texts)),
-                total=len(keys)
-        ):
+    with Pool(processes=10, maxtasksperchild=10) as pool:
+        for _ in tqdm(pool.imap_unordered(partial(process_context, out_dir=out_dir), list(zip(keys, texts))), total=n):
             pass
-        p.close()
-        p.join()
-        if len(outputs) > 0:
-            dump_chunk(outputs, out_dir)
 
 
 if __name__ == '__main__':
@@ -149,6 +121,7 @@ if __name__ == '__main__':
         if not os.path.exists(out_chunk_dir):
             print('Creating directory at {}'.format(out_chunk_dir))
             os.mkdir(out_chunk_dir)
+        print('Collecting previous chunks...')
         preexisting = collect(out_chunk_dir)
         prev_n = len(preexisting)
         print('We\'ve already preprocessed {} examples.  Skipping them this time.'.format(prev_n))

@@ -1,6 +1,7 @@
 from collections import defaultdict
 import json
 import os
+import string
 import unicodedata
 
 from nlp import load_dataset
@@ -8,6 +9,7 @@ from torch.utils.data import Subset
 from tqdm import tqdm
 
 home_dir = os.path.expanduser('~/aqa')
+printable = set(string.printable)
 
 
 def dict_to_lists(obj):
@@ -145,22 +147,20 @@ class TriviaQA(DatasetBase):
         d = {}
         skip_keys = set(skip_keys)
         examples = self[type]
-        skipped = set()
-        for i, example in enumerate(examples):
+        n = len(examples)
+        for i in tqdm(range(n)):
+            example = examples[i]
             contexts = self._extract_contexts(example)
             for k, v in contexts:
                 if k in skip_keys:
-                    skipped.add(k)
                     continue
 
+                v = ''.join(filter(lambda x: x in printable, v))
                 if k in d:
                     assert v == d[k]
                 else:
                     d[k] = v
-            if (i + 1) % 10000 == 0 or (i + 1) == len(examples):
-                print('Loaded contexts for {} examples.'.format(i + 1))
         print('Unique documents={}'.format(len(d)))
-        assert len(skipped) == len(skip_keys)
         return d
 
     def get_context_kv_pairs(self, type, skip_keys=[]):
