@@ -1,9 +1,11 @@
+from collections import defaultdict
 import json
 import os
 import unicodedata
 
 from nlp import load_dataset
 from torch.utils.data import Subset
+from tqdm import tqdm
 
 home_dir = os.path.expanduser('~/aqa')
 
@@ -19,8 +21,9 @@ def dict_to_lists(obj):
 def dataset_factory(name):
     if name == 'hotpot_qa':
         return HotpotQA()
-    else:
+    elif name == 'trivia_qa':
         return TriviaQA()
+    raise Exception('Didn\'t recognize dataset={}'.format(name))
 
 
 class DatasetBase:
@@ -71,15 +74,36 @@ class HotpotQA(DatasetBase):
     def __init__(self):
         super().__init__('hotpot_qa')
 
-    def get_context_kv_pairs(self, type):
-        keys, texts = [], []
-        examples = self[type]
+    def get_linked_contexts(self, dtype):
+        linked = defaultdict(list)
+        examples = self[dtype]
         for example in examples:
-            for context in example['context']:
-                keys.append(context[0])
-                # Given as list of sentences.  need one passage for proper coref resolution
-                texts.append(unicodedata.normalize('NFKD', ' '.join(context[1])))
-        return keys, texts
+            id = example['_id']
+            context_ids = list(map(lambda x: x[0], example['context']))
+            linked[id] = context_ids
+        return linked
+
+    def get_contexts(self, dtype, skip_keys=[]):
+        d = {}
+        examples = self[dtype]
+        skip_keys = set(skip_keys)
+        skipped = set()
+        n = len(examples)
+        for i in tqdm(range(n)):
+            for context in examples[i]['context']:
+                k, v = context[0], unicodedata.normalize('NFKD', ' '.join(context[1]))
+                if k in skip_keys:
+                    skipped.add(k)
+                    continue
+                if k in d:
+                    assert v == d[k]
+                else:
+                    d[k] = v
+        assert len(skip_keys) == len(skipped)
+        return d
+
+    def get_context_kv_pairs(self, dtype, skip_keys=[]):
+        return dict_to_lists(self.get_contexts(dtype, skip_keys=skip_keys))
 
     def remove_q_types(self, examples, qtypes=['comparison']):
         return list(filter(lambda x: 'type' not in x or not x['type'] in qtypes, examples))
@@ -105,7 +129,6 @@ class TriviaQA(DatasetBase):
     def _extract_contexts(self, example):
         keys = []
         texts = []
-
         for title, text in zip(example['entity_pages']['title'], example['entity_pages']['wiki_context']):
             k = '{}_{}'.format('wiki', title)
             keys.append(k)
@@ -118,22 +141,30 @@ class TriviaQA(DatasetBase):
 
         return list(zip(keys, texts))
 
-    def extract_contexts(self, type):
+    def extract_contexts(self, type, skip_keys=[]):
         d = {}
-        for i, example in enumerate(self[type]):
+        skip_keys = set(skip_keys)
+        examples = self[type]
+        skipped = set()
+        for i, example in enumerate(examples):
             contexts = self._extract_contexts(example)
             for k, v in contexts:
+                if k in skip_keys:
+                    skipped.add(k)
+                    continue
+
                 if k in d:
                     assert v == d[k]
                 else:
                     d[k] = v
-            if (i + 1) % 10000 == 0 or (i + 1) == len(self[type]):
+            if (i + 1) % 10000 == 0 or (i + 1) == len(examples):
                 print('Loaded contexts for {} examples.'.format(i + 1))
         print('Unique documents={}'.format(len(d)))
+        assert len(skipped) == len(skip_keys)
         return d
 
-    def get_context_kv_pairs(self, type):
-        return dict_to_lists(self.extract_contexts(type))
+    def get_context_kv_pairs(self, type, skip_keys=[]):
+        return dict_to_lists(self.extract_contexts(type, skip_keys=skip_keys))
 
     def get_train(self):
         return self.cached_dataset['train']
