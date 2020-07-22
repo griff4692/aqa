@@ -73,7 +73,8 @@ class HotpotQA(DatasetBase):
 
     def get_context_kv_pairs(self, type):
         keys, texts = [], []
-        for example in self[type]:
+        examples = self[type]
+        for example in examples:
             for context in example['context']:
                 keys.append(context[0])
                 # Given as list of sentences.  need one passage for proper coref resolution

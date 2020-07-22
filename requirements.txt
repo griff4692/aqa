@@ -1,5 +1,3 @@
-allennlp==1.0.0
-allennlp-models==1.0.0
 matplotlib
 spacy==2.1.0
 neuralcoref
@@ -11,3 +9,4 @@ pytorch_lightning
 scikit-learn
 torch
 torchvision
+transformers
