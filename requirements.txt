@@ -2,15 +2,12 @@ allennlp==1.0.0
 allennlp-models==1.0.0
 bs4
 matplotlib
-spacy==2.1.0
-neuralcoref
 networkx
 nlp
 numpy
 pandas
 pytorch_lightning
 scikit-learn
-textpipeliner
 torch
 torchvision
 transformers
