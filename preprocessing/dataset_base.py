@@ -25,6 +25,8 @@ def dataset_factory(name):
         return HotpotQA()
     elif name == 'trivia_qa':
         return TriviaQA()
+    elif name == 'squad':
+        return Squad()
     raise Exception('Didn\'t recognize dataset={}'.format(name))
 
 
@@ -71,6 +73,18 @@ class DatasetBase:
         else:
             return self.get_test()
 
+    def get_train(self):
+        return self.cached_dataset['train']
+
+    def get_validation(self):
+        return self.cached_dataset['validation']
+
+    def get_test(self):
+        return self.cached_dataset['test']
+
+    def get_context_kv_pairs(self, type, skip_keys=[]):
+        return dict_to_lists(self.extract_contexts(type, skip_keys=skip_keys))
+
 
 class HotpotQA(DatasetBase):
     def __init__(self):
@@ -104,9 +118,6 @@ class HotpotQA(DatasetBase):
         assert len(skip_keys) == len(skipped)
         return d
 
-    def get_context_kv_pairs(self, dtype, skip_keys=[]):
-        return dict_to_lists(self.get_contexts(dtype, skip_keys=skip_keys))
-
     def remove_q_types(self, examples, qtypes=['comparison']):
         return list(filter(lambda x: 'type' not in x or not x['type'] in qtypes, examples))
 
@@ -121,6 +132,33 @@ class HotpotQA(DatasetBase):
     def get_test(self):
         with open(os.path.join(self.data_dir, 'hotpot_test_fullwiki_v1.json'), 'r') as fd:
             return self.remove_q_types(json.load(fd))
+
+
+class Squad(DatasetBase):
+    def __init__(self):
+        super().__init__('squad')
+        self.cached_dataset = load_dataset('squad')
+
+    def extract_contexts(self, type, skip_keys=[]):
+        d = {}
+        s = set()
+        skip_keys = set(skip_keys)
+        examples = self[type]
+        n = len(examples)
+        for i in tqdm(range(n)):
+            example = examples[i]
+            v = example['context'].strip()
+            k = '{}_{}_{}_{}'.format(example['title'], v[:10], v[-10:], str(len(v)))
+            s.add(v)
+            if k in skip_keys:
+                continue
+            v = ''.join(filter(lambda x: x in printable, v))
+            if k in d:
+                assert v == d[k]
+            else:
+                d[k] = v
+        print('Unique documents={}'.format(len(d)))
+        return d
 
 
 class TriviaQA(DatasetBase):
@@ -163,14 +201,3 @@ class TriviaQA(DatasetBase):
         print('Unique documents={}'.format(len(d)))
         return d
 
-    def get_context_kv_pairs(self, type, skip_keys=[]):
-        return dict_to_lists(self.extract_contexts(type, skip_keys=skip_keys))
-
-    def get_train(self):
-        return self.cached_dataset['train']
-
-    def get_validation(self):
-        return self.cached_dataset['validation']
-
-    def get_test(self):
-        return self.cached_dataset['test']

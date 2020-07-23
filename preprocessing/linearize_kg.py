@@ -6,7 +6,6 @@ import sys
 import unicodedata
 
 import argparse
-import pandas as pd
 import spacy
 from torch.utils.data import Dataset
 

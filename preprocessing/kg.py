@@ -1,13 +1,10 @@
 from collections import Counter, defaultdict
-from functools import partial
 import itertools
 import json
 from multiprocessing import Manager, Pool
-import pandas as pd
 import pickle
 import os
 import shutil
-import sys
 from string import punctuation
 from time import time
 from tqdm import tqdm
@@ -16,7 +13,6 @@ import argparse
 import networkx as nx
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
-from sklearn.metrics import pairwise_distances
 import spacy
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import torch
@@ -248,4 +244,3 @@ if __name__ == '__main__':
         print('Removing temporary chunks...')
         shutil.rmtree(out_dir)
         os.mkdir(out_dir)
-
