@@ -20,7 +20,7 @@ def clean(str):
     return str.strip()
 
 
-def generate_coref_input(dataset, dtype, data_dir):
+def generate_coref_input(dataset, dtype, data_dir, predictor):
     """
     :param dataset_name: string name of dataset (path where it's saved in ../data)
     :param dtype: one of 'mini', 'train', 'validation', 'test'
@@ -33,8 +33,8 @@ def generate_coref_input(dataset, dtype, data_dir):
     outputs = []
     for i in tqdm(range(n)):
         text_cleaned = clean(texts[i])
-        outputs.append(text_cleaned)
-
+        coref_output = predictor(document=text_cleaned)
+        outputs.append(coref_output)
     out_fn = os.path.join(data_dir, 'coref_output_{}.json')
     with open(out_fn, 'w') as fd:
         json.dump(outputs, fd)
@@ -66,5 +66,5 @@ if __name__ == '__main__':
 
     for dtype in dtypes:
         start_time = time()
-        generate_coref_input(dataset, dtype, data_dir)
+        generate_coref_input(dataset, dtype, data_dir, predictor)
         duration(start_time)
