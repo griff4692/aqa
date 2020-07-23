@@ -7,6 +7,7 @@ from allennlp.predictors.predictor import Predictor
 import allennlp_models.coref
 from bs4 import BeautifulSoup
 import argparse
+import torch
 from tqdm import tqdm
 
 from dataset_base import dataset_factory
@@ -52,8 +53,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     predictor = Predictor.from_path(
-        "https://storage.googleapis.com/allennlp-public-models/coref-spanbert-large-2020.02.27.tar.gz")
-
+        "https://storage.googleapis.com/allennlp-public-models/coref-spanbert-large-2020.02.27.tar.gz",
+        cuda_device=torch.cuda.current_device()
+    )
     data_dir = os.path.join('..', 'data', args.dataset, 'coref_data')
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
