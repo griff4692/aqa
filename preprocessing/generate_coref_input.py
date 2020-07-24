@@ -34,13 +34,13 @@ def generate_coref_input(dataset, dtype, data_dir, predictor):
     outputs = []
     for i in tqdm(range(n)):
         text_cleaned = clean(texts[i])
-        coref_output = predictor(document=text_cleaned)
+        coref_output = predictor.predict(document=text_cleaned)
         outputs.append(coref_output)
-    out_fn = os.path.join(data_dir, 'coref_output_{}.json')
+    out_fn = os.path.join(data_dir, 'coref_output_{}.json'.format(dtype))
     with open(out_fn, 'w') as fd:
         json.dump(outputs, fd)
 
-    keys_out_fn = os.path.join(data_dir, 'coref_keys_{}.json')
+    keys_out_fn = os.path.join(data_dir, 'coref_keys_{}.json'.format(dtype))
     with open(keys_out_fn, 'w') as fd:
         json.dump(keys, fd)
 

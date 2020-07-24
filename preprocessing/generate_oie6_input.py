@@ -37,7 +37,6 @@ def generate_ie_input(dataset_name, dtype, data_dir):
     keys = []
     sents = []
     n = len(contexts)
-    keys = contexts.keys()
     for i, (k, context_obj) in enumerate(contexts.items()):
         doc = spacy_nlp(clean(context_obj['resolved']))
         for j, sent in enumerate(doc.sents):
