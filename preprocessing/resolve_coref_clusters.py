@@ -1,7 +1,16 @@
 from collections import defaultdict
+import json
+import os
 import re
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
+import argparse
 import numpy as np
+from time import time
+
+from dataset_base import dataset_factory
+from utils import duration
 
 PRONOUNS = {
     'all', 'another', 'any', 'anybody', 'anyone', 'anything', 'as', 'aught', 'both', 'each other', 'each', 'either',
@@ -60,10 +69,15 @@ def build_doc(resolved, spans, d):
 
 
 def build_str(span_str, resolved, dependencies, d, is_tgt):
-    if is_tgt:
-        assert len(dependencies) == 1
-        return resolved[list(dependencies)[0]]
     span = str2span(span_str)
+    if is_tgt:
+        copy_span_str = list(dependencies)[0]
+        if copy_span_str in resolved:
+            return resolved[copy_span_str]
+        else:
+            print('Warning. Circular dependency detected!')
+            copy_span = str2span(copy_span_str)
+            return d[copy_span[0]:copy_span[1] + 1]
     s = span[0]
     e = span[1]
     # remove sub-dependencies
@@ -80,7 +94,10 @@ def build_str(span_str, resolved, dependencies, d, is_tgt):
                 copy_to = dep_spans[dep_idx][1]
         if copy_to > -1:
             copy_str = span2str([curr_idx, copy_to])
-            toks += resolved[copy_str]
+            if copy_str in resolved:
+                toks += resolved[copy_str]
+            else:
+                print('Warning. Circular dependency likely. Skipping.')
             curr_idx = copy_to + 1
         else:
             toks.append(d[curr_idx])
@@ -98,9 +115,24 @@ def resolve(document, clusters):
     replaced_span_strs = set()
     subsumed_set = set()
 
+    clusters_non_overlapping = []
     for cluster in clusters:
-        cluster_toks = list(map(lambda x: document[x[0]:x[1] + 1], cluster))
-        spans_no_pronouns = map(lambda x: set(x) - PRONOUNS, cluster_toks)
+        cluster_starts = [c[0] for c in cluster]
+        cluster_order = np.argsort(np.array(cluster_starts))
+
+        cluster_non_overlapping = []
+        for i, cidx in enumerate(cluster_order):
+            curr_cluster = cluster[cidx]
+            for j in range(i + 1, len(cluster)):
+                if curr_cluster[1] >= cluster[cluster_order[j]][0]:
+                    e_idx = max(curr_cluster[0], cluster[cluster_order[j]][0] - 1)
+                    curr_cluster = [curr_cluster[0], e_idx]
+                    break
+            cluster_non_overlapping.append(curr_cluster)
+        clusters_non_overlapping.append(cluster_non_overlapping)
+
+        cluster_toks = list(map(lambda x: document[x[0]:x[1] + 1], cluster_non_overlapping))
+        spans_no_pronouns = map(lambda x: set([y.lower() for y in x]) - PRONOUNS, cluster_toks)
         span_lens = np.array(list(map(len, spans_no_pronouns)))
         head_span_idx = None
         for i, span_len in enumerate(span_lens):
@@ -108,16 +140,21 @@ def resolve(document, clusters):
                 head_span_idx = i
                 break
 
-        head_span = cluster[head_span_idx]
+        if head_span_idx is None:
+            head_span_idx = 0
+
+        head_span = cluster_non_overlapping[head_span_idx]
         head_span_str = span2str(head_span)
         head_name = ' '.join(cluster_toks[head_span_idx])
-        for i, span in enumerate(cluster):
+        for i, span in enumerate(cluster_non_overlapping):
             if i == head_span_idx:
                 continue
             tgt_span_str = span2str(span)
-            tgt_span_toks = cluster_toks[i]
-            is_contained = re.search(r'{}'.format(head_name), ' '.join(tgt_span_toks)) is not None
+            if tgt_span_str in replaced_span_strs:
+                continue
 
+            tgt_span_toks = cluster_toks[i]
+            is_contained = re.search(re.escape(head_name.lower()), ' '.join(tgt_span_toks).lower()) is not None
             if is_contained:
                 continue
             all_spans.add(head_span_str)
@@ -171,24 +208,43 @@ def resolve(document, clusters):
 
 
 if __name__ == '__main__':
-    example = {
-        'document': [
-            'Paul', 'Allen', 'was', 'born', 'on', 'January', '21', ',', '1953', ',', 'in', 'Seattle', ',', 'Washington',
-            ',', 'to', 'Kenneth', 'Sam', 'Allen', 'and', 'Edna', 'Faye', 'Allen', '.', 'Allen', 'attended', 'Lakeside',
-            'School', ',', 'a', 'private', 'school', 'in', 'Seattle', ',', 'where', 'he', 'befriended', 'Bill',
-            'Gates', ',', 'two', 'years', 'younger', ',', 'with', 'whom', 'he', 'shared', 'an', 'enthusiasm', 'for',
-            'computers', '.', 'Paul', 'and', 'Bill', 'used', 'a', 'teletype', 'terminal', 'at', 'their', 'high',
-            'school', ',', 'Lakeside', ',', 'to', 'develop', 'their', 'programming', 'skills', 'on', 'several',
-            'time', '-', 'sharing', 'computer', 'systems',  '.'
-        ],
-        'clusters': [
-            [[0, 1], [24, 24], [36, 36], [47, 47], [54, 54]],
-            [[11, 14], [33, 33]],
-            [[38, 52], [56, 56]],
-            [[54, 56], [62, 62], [70, 70]],
-            [[26, 34], [62, 67]]
-        ]
-    }
+    parser = argparse.ArgumentParser('Generate json file for  consumption by SpanBERT.')
+    parser.add_argument('--dataset', default='squad', help='squad, trivia_qa, or hotpot_qa')
+    parser.add_argument(
+        '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
+    args = parser.parse_args()
 
-    resolved_toks = resolve(example['document'], example['clusters'])
-    print(' '.join(resolved_toks))
+    data_dir = os.path.join('..', 'data', args.dataset, 'coref_data')
+    dataset = dataset_factory(args.dataset)
+    if dataset.name == 'squad':
+        dtypes = ['mini'] if args.debug else ['train', 'validation']
+    else:
+        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+
+    for dtype in dtypes:
+        start_time = time()
+        keys_fn = os.path.join(data_dir, 'coref_keys_{}.json'.format(dtype))
+        coref_fn = os.path.join(data_dir, 'coref_output_{}.json'.format(dtype))
+        with open(coref_fn, 'r') as fd:
+            corefs = json.load(fd)
+        with open(keys_fn, 'r') as fd:
+            keys = json.load(fd)
+
+        from tqdm import tqdm
+        resolved = list(tqdm(map(
+            lambda coref_output: resolve(coref_output['document'], coref_output['clusters']),
+            corefs
+        ), total=len(corefs)))
+
+        output = {}
+        for i in range(len(keys)):
+            k, v = keys[i], corefs[i]
+            v['resolved'] = resolved[i]
+            output[k] = v
+
+        duration(start_time)
+        out_fn = os.path.join(data_dir, 'coref_resolved_{}.json'.format(dtype))
+        print('Dumping to {}'.format(out_fn))
+
+        with open(out_fn, 'w') as fd:
+            json.dump(output, fd)
