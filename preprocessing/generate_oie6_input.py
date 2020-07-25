@@ -5,7 +5,6 @@ from time import time
 
 from bs4 import BeautifulSoup
 import argparse
-import spacy
 from spacy.lang.en import English
 
 
@@ -21,15 +20,14 @@ def clean(str):
     return str.strip()
 
 
-def generate_ie_input(dataset_name, dtype, data_dir):
+def generate_ie_input(dtype, data_dir):
     """
-    :param dataset_name: string name of dataset (path where it's saved in ../data)
     :param dtype: one of 'mini', 'train', 'validation', 'test'
     :return: None
 
     """
     print('Loading {} set...'.format(dtype))
-    context_fn = os.path.join('..', 'data', dataset_name, 'contexts_{}.json'.format(dtype))
+    context_fn = os.path.join(data_dir, 'coref_data', 'coref_resolved_{}.json'.format(dtype))
 
     with open(context_fn, 'r') as fd:
         contexts = json.load(fd)
@@ -38,7 +36,7 @@ def generate_ie_input(dataset_name, dtype, data_dir):
     sents = []
     n = len(contexts)
     for i, (k, context_obj) in enumerate(contexts.items()):
-        doc = spacy_nlp(clean(context_obj['resolved']))
+        doc = spacy_nlp(clean(' '.join(context_obj['resolved'])))
         for j, sent in enumerate(doc.sents):
             sent = sent.string.strip()
             if len(sent) > 0 and len(re.sub(r'\W+', '', sent)) > 0:
@@ -50,18 +48,18 @@ def generate_ie_input(dataset_name, dtype, data_dir):
         if (i + 1) % 10000 == 0 or (i + 1) == n:
             print('Processed {} out of {} contexts.'.format(i + 1, n))
 
-    sent_out_fn = os.path.join(data_dir, 'sentences_{}.txt'.format(dtype))
+    sent_out_fn = os.path.join(data_dir, 'oie_data', 'sentences_{}.txt'.format(dtype))
     with open(sent_out_fn, 'w') as fd:
         fd.write('\n'.join(sents))
-    keys_out_fn = os.path.join(data_dir, 'keys_{}.txt'.format(dtype))
+    keys_out_fn = os.path.join(data_dir, 'oie_data', 'keys_{}.json'.format(dtype))
     with open(keys_out_fn, 'w') as fd:
-        fd.write('\n'.join(keys))
+        json.dump(keys, fd)
     print('Saved sentences and corresponding context keys to {} and {}'.format(sent_out_fn, keys_out_fn))
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Generate raw sentences file for consumption by open IE 6.')
-    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()
@@ -73,12 +71,16 @@ if __name__ == '__main__':
     spacy_nlp.add_pipe(sentencizer)
     print('Done Loading Spacy...')
 
-    data_dir = os.path.join('..', 'data', args.dataset, 'open_ie_data')
+    data_dir = os.path.join('..', 'data', args.dataset)
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
 
-    dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+    if args.dataset == 'squad':
+        dtypes = ['mini'] if args.debug else ['train', 'validation']
+    else:
+        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+
     for dtype in dtypes:
         start_time = time()
-        generate_ie_input(args.dataset, dtype, data_dir)
+        generate_ie_input(dtype, data_dir)
         duration(start_time)

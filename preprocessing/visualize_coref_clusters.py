@@ -4,7 +4,7 @@ crv = json.load(open('../data/squad/coref_data/coref_resolved_validation.json', 
 
 keys = list(crv.keys())
 
-i = 222
+i = 753
 data = crv[keys[i]]
 
 print('Original:')

@@ -139,6 +139,16 @@ class Squad(DatasetBase):
         super().__init__('squad')
         self.cached_dataset = load_dataset('squad')
 
+    def get_linked_contexts(self, dtype):
+        linked = defaultdict(list)
+        examples = self[dtype]
+        for example in examples:
+            id = example['id']
+            v = example['context'].strip()
+            k = '{}_{}_{}_{}'.format(example['title'], v[:10], v[-10:], str(len(v)))
+            linked[id] = [k]
+        return linked
+
     def extract_contexts(self, type, skip_keys=[]):
         d = {}
         s = set()

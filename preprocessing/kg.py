@@ -22,7 +22,7 @@ from torch.nn import DataParallel as DP
 from dataset_base import dataset_factory
 from utils import duration
 
-DIST_THRESHOLD = 0.3
+DIST_THRESHOLD = 0.2
 
 
 def chunks(lst, n):
@@ -141,12 +141,19 @@ def construct_graph(input, out_dir=None):
 def compute_sim(x, y):
     input = list(zip(x, y))
     results = []
-    batch_size = 200 * len(model.device_ids)
+
+    if torch.cuda.is_available():
+        batch_size = 200 * len(model.device_ids)
+        device_str = f'cuda:{model.device_ids[0]}'
+    else:
+        batch_size = 200
+        device_str = 'cpu'
+
     for chunk in chunks(input, batch_size):
         x = [c[0] for c in chunk]
         y = [c[1] for c in chunk]
-        batch_input = tokenizer(x, y, return_tensors='pt', max_length=20, padding='max_length', truncation=True
-                                ).to(f'cuda:{model.device_ids[0]}')
+        batch_input = tokenizer(
+            x, y, return_tensors='pt', max_length=20, padding='max_length', truncation=True).to(device_str)
         logits = model(**batch_input)[0]
         batch_results = torch.softmax(logits, dim=1)[:, 1].tolist()
         results += batch_results
@@ -163,7 +170,7 @@ def load_precomputed(out_dir, output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Generate knowledge graphs from OIE6 output.')
-    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()
@@ -185,23 +192,29 @@ if __name__ == '__main__':
         print('GPU detected')
     else:
         DEVICE = torch.device("cpu")
+        device_ids = -1
         print('No GPU. switching to CPU')
 
     model = 'textattack/albert-base-v2-MRPC'
     tokenizer = AutoTokenizer.from_pretrained(model)
     model = AutoModelForSequenceClassification.from_pretrained(model)
-    model = DP(model, device_ids=device_ids)
-    model.to(f'cuda:{model.device_ids[0]}')
+    if not device_ids == -1:
+        model = DP(model, device_ids=device_ids)
+        model.to(f'cuda:{model.device_ids[0]}')
 
     print('Porting model to CUDA...')
     model.eval()
 
     update_incr = 10 if args.debug else 100
-    dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+    if dataset.name == 'squad':
+        dtypes = ['mini'] if args.debug else ['train', 'validation']
+    else:
+        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+
     results = []
     for dtype in dtypes:
         start_time = time()
-        oie_fn = os.path.join(data_dir, 'open_ie_data', 'predictions_{}.json'.format(dtype))
+        oie_fn = os.path.join(data_dir, 'oie_data', 'predictions_{}.json'.format(dtype))
         print('Loading open IE output for {} set...'.format(dtype))
         with open(oie_fn, 'r') as fd:
             oie_data = json.load(fd)
