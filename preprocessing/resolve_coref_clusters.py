@@ -8,6 +8,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 import argparse
 import numpy as np
 from time import time
+from tqdm import tqdm
 
 from dataset_base import dataset_factory
 from utils import duration
@@ -209,7 +210,7 @@ def resolve(document, clusters):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Generate json file for  consumption by SpanBERT.')
-    parser.add_argument('--dataset', default='squad', help='squad, trivia_qa, or hotpot_qa')
+    parser.add_argument('--dataset', default='hotpot_qa', help='squad, trivia_qa, or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()
@@ -223,6 +224,7 @@ if __name__ == '__main__':
 
     for dtype in dtypes:
         start_time = time()
+        print('Loading raw coref output for {} {} set...'.format(args.dataset, dtype))
         keys_fn = os.path.join(data_dir, 'coref_keys_{}.json'.format(dtype))
         coref_fn = os.path.join(data_dir, 'coref_output_{}.json'.format(dtype))
         with open(coref_fn, 'r') as fd:
@@ -230,7 +232,7 @@ if __name__ == '__main__':
         with open(keys_fn, 'r') as fd:
             keys = json.load(fd)
 
-        from tqdm import tqdm
+        print('Replacing coreferent entities with head (i.e. first non-pronominal) mention in cluster...')
         resolved = list(tqdm(map(
             lambda coref_output: resolve(coref_output['document'], coref_output['clusters']),
             corefs
@@ -239,8 +241,9 @@ if __name__ == '__main__':
         output = {}
         for i in range(len(keys)):
             k, v = keys[i], corefs[i]
-            v['resolved'] = resolved[i]
-            output[k] = v
+            r = dict({'document': v['document'], 'clusters': v['clusters']})
+            r['resolved'] = resolved[i]
+            output[k] = r
 
         duration(start_time)
         out_fn = os.path.join(data_dir, 'coref_resolved_{}.json'.format(dtype))

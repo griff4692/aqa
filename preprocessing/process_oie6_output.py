@@ -11,6 +11,7 @@ from utils import duration
 
 MATCH_REGEX = r'\d\.\d+: \((.*)\)$'
 MINI_MATCH_REGEX = r'[.\d]+. \((.*)\)'
+MIN_CONFIDENCE = 0.01
 
 
 def process_source(str):
@@ -56,7 +57,9 @@ def process_output(dataset, dtype):
                 ie_output = ie_match.group(1).split(';')
                 ie_output = list(map(lambda x: x.strip(), ie_output))
                 ie_output_stripped = list(filter(lambda x: len(x) > 0, ie_output))
-                if len(ie_output_stripped) == 3:
+                conf = float(line[:4])
+                should_include = len(curr_result) < 3 or float(conf) > MIN_CONFIDENCE
+                if len(ie_output_stripped) == 3 and should_include:
                     curr_result.append(ie_output_stripped)
     results.append(curr_result)
     num_result = len(results)
@@ -73,7 +76,7 @@ def process_output(dataset, dtype):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Generate raw sentences file for consumption by open IE 6.')
-    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()

@@ -170,7 +170,7 @@ def load_precomputed(out_dir, output):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Generate knowledge graphs from OIE6 output.')
-    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()
@@ -199,10 +199,9 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained(model)
     model = AutoModelForSequenceClassification.from_pretrained(model)
     if not device_ids == -1:
+        print('Porting model to CUDA...')
         model = DP(model, device_ids=device_ids)
         model.to(f'cuda:{model.device_ids[0]}')
-
-    print('Porting model to CUDA...')
     model.eval()
 
     update_incr = 10 if args.debug else 100
@@ -236,7 +235,7 @@ if __name__ == '__main__':
         print('Starting to construct graphs...')
         out_dir = os.path.join(data_dir, 'chunks', 'kg', dtype)
         if not os.path.exists(out_dir):
-            os.mkdir(out_dir)
+            os.makedirs(out_dir)
 
         output = {}
         load_precomputed(out_dir, output)

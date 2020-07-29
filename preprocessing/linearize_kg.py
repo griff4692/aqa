@@ -1,22 +1,16 @@
-from collections import Counter
 import os
 import pickle
 from string import punctuation
-import sys
-import unicodedata
 
 import argparse
 import pandas as pd
 import spacy
-from torch.utils.data import Dataset
-from tqdm import tqdm
 from p_tqdm import p_uimap
 
 
 from dataset_base import dataset_factory
 from kg import tokenize
 
-import networkx as nx
 from networkx.algorithms.traversal.breadth_first_search import bfs_edges
 
 print('Loading Spacy...')
@@ -119,7 +113,7 @@ def linearize_graph(input):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('PyTorch Dataset wrapper for Question Generation Task.')
-    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
     args = parser.parse_args()

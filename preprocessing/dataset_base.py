@@ -99,7 +99,7 @@ class HotpotQA(DatasetBase):
             linked[id] = context_ids
         return linked
 
-    def get_contexts(self, dtype, skip_keys=[]):
+    def extract_contexts(self, dtype, skip_keys=[]):
         d = {}
         examples = self[dtype]
         skip_keys = set(skip_keys)
