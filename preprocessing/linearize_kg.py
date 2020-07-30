@@ -1,4 +1,5 @@
 import os
+from functools import partial
 import pickle
 from string import punctuation
 
@@ -66,7 +67,7 @@ def _linearize_graph(graph, answer_toks):
         edge_data = graph.edges[edge]
         verbs = edge_data['verbs']
         if i > 0:
-            verbs -= set(['subset'])
+            verbs -= {'subset'}
         verbs = list(verbs)
         if len(verbs) == 0:
             continue
@@ -90,9 +91,16 @@ def _linearize_graph(graph, answer_toks):
 def linearize_graph(input):
     example, graph = input
 
-    id = example['id']
-    q_toks = tokenize(example['question'])
-    a_toks = tokenize(example['answers']['text'][0])
+    id = example[qid_key]
+    q_toks = tokenize(example[q_key])
+    ans = None
+    for k in a_keys:
+        if ans is None:
+            ans = example[k]
+        else:
+            ans = ans[k]
+
+    a_toks = tokenize(ans)
     graph_seq, max_overlap, target_node_idx, num_edges = _linearize_graph(graph, a_toks)
 
     graph_tok_set = set(graph_seq.split(' '))
@@ -119,6 +127,11 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     dataset = dataset_factory(args.dataset)
+
+    qid_key = dataset.qid_key()
+    q_key = dataset.question_key()
+    a_keys = dataset.answer_keys()
+
     if dataset.name == 'squad':
         dtypes = ['mini'] if args.debug else ['train', 'validation']
     else:
@@ -133,7 +146,7 @@ if __name__ == '__main__':
             kgs = pickle.load(fd)
 
         n = len(d)
-        examples_w_graph = [(example, kgs[example['id']]) for example in d if example['id'] in kgs]
+        examples_w_graph = [(example, kgs[example[qid_key]]) for example in d if example[qid_key] in kgs]
         outputs = list(p_uimap(linearize_graph, examples_w_graph))
 
         out_fn = os.path.join('..', 'data', dataset.name, 'dataset_{}.csv'.format(dtype))

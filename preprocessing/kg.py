@@ -22,7 +22,7 @@ from torch.nn import DataParallel as DP
 from dataset_base import dataset_factory
 from utils import duration
 
-DIST_THRESHOLD = 0.2
+DIST_THRESHOLD = 0.25
 
 
 def chunks(lst, n):
@@ -58,7 +58,7 @@ def _construct_graph(oie_tuples, node_assignments, cluster_assignments, node_wei
             g.edges[u_node, v_node]['verbs'].add(e)
             g.edges[v_node, u_node]['verbs'].add(e)
         else:
-            e_set = set([e])
+            e_set = {e}
             g.add_edge(u_node, v_node, u_name=u, v_name=v, verbs=e_set, back_edge=False)
             g.add_edge(v_node, u_node, u_name=u, v_name=v, verbs=e_set, back_edge=True)
     return g
@@ -206,9 +206,9 @@ if __name__ == '__main__':
 
     update_incr = 10 if args.debug else 100
     if dataset.name == 'squad':
-        dtypes = ['mini'] if args.debug else ['train', 'validation']
+        dtypes = ['mini'] if args.debug else ['validation', 'train']
     else:
-        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+        dtypes = ['mini'] if args.debug else ['test', 'validation', 'train']
 
     results = []
     for dtype in dtypes:

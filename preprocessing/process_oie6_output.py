@@ -14,27 +14,8 @@ MINI_MATCH_REGEX = r'[.\d]+. \((.*)\)'
 MIN_CONFIDENCE = 0.01
 
 
-def process_source(str):
-    source_sentence = str.replace('’', '\'')
-    source_sentence = source_sentence.replace('”', '\'\'')
-    source_sentence = source_sentence.replace('“', '\'\'')
-    source_sentence = nltk.tokenize.word_tokenize(source_sentence.strip('\n'))
-    target_sentence = ' '.join(source_sentence[:95])
-    return target_sentence
-
-
 def process_output(dataset, dtype):
     regex = MINI_MATCH_REGEX if dtype == 'mini' else MATCH_REGEX
-    oie_sentences_fn = os.path.join('..', 'data', dataset, 'oie_data', 'sentences_{}.txt'.format(dtype))
-
-    source = []
-    with open(oie_sentences_fn, 'r') as fd:
-        for line in fd:
-            line = line.strip()
-            if len(line) > 0:
-                source.append(process_source(line))
-
-    source_set = set(source)
     oie_results_fn = os.path.join('..', 'data', dataset, 'oie_data', 'predictions_{}.txt'.format(dtype))
     out_fn = os.path.join('..', 'data', dataset, 'oie_data', 'predictions_{}.json'.format(dtype))
     keys_fn = os.path.join('..', 'data', dataset, 'oie_data', 'keys_{}.json'.format(dtype))
@@ -46,22 +27,25 @@ def process_output(dataset, dtype):
     curr_result = []
 
     with open(oie_results_fn, 'r') as fd:
+        prev_line = 'random'
         for i, line in enumerate(fd):
             line = line.strip()
-            if line in source_set:
-                if i > 0:
-                    results.append(curr_result)
-                    curr_result = []
-            elif len(line) > 0:
+            if len(line) == 0 and not len(prev_line) == 0:
+                results.append(curr_result)
+                curr_result = []
+            else:
                 ie_match = re.match(regex, line, flags=re.M)
-                ie_output = ie_match.group(1).split(';')
-                ie_output = list(map(lambda x: x.strip(), ie_output))
-                ie_output_stripped = list(filter(lambda x: len(x) > 0, ie_output))
-                conf = float(line[:4])
-                should_include = len(curr_result) < 3 or float(conf) > MIN_CONFIDENCE
-                if len(ie_output_stripped) == 3 and should_include:
-                    curr_result.append(ie_output_stripped)
-    results.append(curr_result)
+                if ie_match is not None:
+                    ie_output = ie_match.group(1).split(';')
+                    ie_output = list(map(lambda x: x.strip(), ie_output))
+                    ie_output_stripped = list(filter(lambda x: len(x) > 0, ie_output))
+                    conf = float(line[:4])
+                    should_include = len(curr_result) < 3 or float(conf) > MIN_CONFIDENCE
+                    if len(ie_output_stripped) == 3 and should_include:
+                        curr_result.append(ie_output_stripped)
+            prev_line = line
+    if len(prev_line) > 0:
+        results.append(curr_result)
     num_result = len(results)
     print('Processed outputs for {} sentences'.format(num_result))
     if not num_keys == num_result:
@@ -82,12 +66,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.dataset == 'squad':
-        dtypes = ['mini'] if args.debug else ['train', 'validation']
+        dtypes = ['mini'] if args.debug else ['validation', 'train']
     else:
-        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+        dtypes = ['mini'] if args.debug else ['test', 'validation', 'train']
 
     results = []
     for dtype in dtypes:
         start_time = time()
+        print('Processing {} {} set...'.format(args.dataset, dtype))
         process_output(args.dataset, dtype)
         duration(start_time)

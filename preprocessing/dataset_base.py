@@ -41,6 +41,9 @@ class DatasetBase:
             print('Creating directory for {} in {}'.format(self.name, self.data_dir))
             os.mkdir(self.data_dir)
 
+    def qid_key(self):
+        return 'id'
+
     def get_mini(self):
         debug_data_fn = os.path.join(self.data_dir, 'train_mini.json')
         if os.path.exists(debug_data_fn):
@@ -90,6 +93,15 @@ class HotpotQA(DatasetBase):
     def __init__(self):
         super().__init__('hotpot_qa')
 
+    def qid_key(self):
+        return '_id'
+
+    def question_key(self):
+        return 'question'
+
+    def answer_keys(self):
+        return ['answer']
+
     def get_linked_contexts(self, dtype):
         linked = defaultdict(list)
         examples = self[dtype]
@@ -138,6 +150,15 @@ class Squad(DatasetBase):
     def __init__(self):
         super().__init__('squad')
         self.cached_dataset = load_dataset('squad')
+
+    def qid_key(self):
+        return '_id'
+
+    def question_key(self):
+        return 'question'
+
+    def answer_keys(self):
+        return ['answers', 'text', 0]
 
     def get_linked_contexts(self, dtype):
         linked = defaultdict(list)
@@ -210,4 +231,3 @@ class TriviaQA(DatasetBase):
                     d[k] = v
         print('Unique documents={}'.format(len(d)))
         return d
-
