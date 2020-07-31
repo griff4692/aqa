@@ -22,7 +22,7 @@ from torch.nn import DataParallel as DP
 from dataset_base import dataset_factory
 from utils import duration
 
-DIST_THRESHOLD = 0.25
+DIST_THRESHOLD = 0.2
 
 
 def chunks(lst, n):
