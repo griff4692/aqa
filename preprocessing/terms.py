@@ -9,7 +9,6 @@ import spacy
 from tqdm import tqdm
 
 from dataset_base import dataset_factory
-from utils import duration, remove_extra_space
 
 
 def tokenize(str):
@@ -19,7 +18,7 @@ def tokenize(str):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('Coreference Resolution Preprocessing Script.')
-    parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
+    parser.add_argument('--dataset', default='squad', help='trivia_qa or hotpot_qa')
     args = parser.parse_args()
 
     dataset = dataset_factory(args.dataset)
@@ -30,8 +29,12 @@ if __name__ == '__main__':
     _, train_contexts = dataset.get_context_kv_pairs('train')
     print('Loading validation set...')
     _, val_contexts = dataset.get_context_kv_pairs('validation')
-    print('Loading test set...')
-    _, test_contexts = dataset.get_context_kv_pairs('test')
+
+    if args.dataset == 'squad':
+        test_contexts = []
+    else:
+            print('Loading test set...')
+            _, test_contexts = dataset.get_context_kv_pairs('test')
     corpus = []
     contexts = train_contexts + val_contexts + test_contexts
     n = len(contexts)

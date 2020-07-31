@@ -44,7 +44,7 @@ def generate_ie_input(dtype, data_dir):
                     sents[-1] += ' {}'.format(sent)
                 else:
                     keys.append(k)
-                    sents.append(sent)
+                    sents.append(sent.replace('``', '"'))
         if (i + 1) % 10000 == 0 or (i + 1) == n:
             print('Processed {} out of {} contexts.'.format(i + 1, n))
 
