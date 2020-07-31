@@ -181,7 +181,6 @@ if __name__ == '__main__':
     chunker = spacy.load('en_core_web_lg')
 
     data_dir = os.path.join('..', 'data', dataset.name)
-    tmp = []
     print('Loading ALBERT...')
 
     #  getting the list of GPUs available
