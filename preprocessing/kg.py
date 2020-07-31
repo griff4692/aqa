@@ -127,7 +127,7 @@ def construct_graph(input, out_dir=None):
         cluster_counts[cluster] = sum(counts)
         candidates = [names[i] for i, count in enumerate(counts) if count == max_count]
         candidate_lens = [len(x) for x in candidates]
-        head_name = candidates[np.argmax(candidate_lens)]
+        head_name = candidates[int(np.argmax(candidate_lens))]
         head_names[cluster] = head_name
 
     g = _construct_graph(oie_tuples_flat, node_assignments, cluster_assignments, cluster_counts, head_names)
