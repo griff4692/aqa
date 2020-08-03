@@ -151,9 +151,6 @@ class Squad(DatasetBase):
         super().__init__('squad')
         self.cached_dataset = load_dataset('squad')
 
-    def qid_key(self):
-        return '_id'
-
     def question_key(self):
         return 'question'
 

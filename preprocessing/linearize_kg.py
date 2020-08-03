@@ -4,6 +4,7 @@ import pickle
 from string import punctuation
 
 import argparse
+import networkx as nx
 from networkx.algorithms.traversal.breadth_first_search import bfs_edges
 import pandas as pd
 import spacy
@@ -73,12 +74,16 @@ def _linearize_graph(graph, answer_toks):
             max_overlap = o
 
     if target_node_idx is None:
-        return '', 0.0, -1, 0, '', '', ''
+        return '', 0.0, -1, 0, '', '', '', '', ''
 
     output = []
     edge_list = []
     edge_list_resolved = []
+    shortest_paths = nx.shortest_path_length(graph, source=None, target=target_node_idx)
+    assert shortest_paths[target_node_idx] == 0
     weights = []
+    node_list = []
+    node_dist = []
     num_edges = 0
     assigned_hl = False
     for i, edge in enumerate(bfs_edges(graph, target_node_idx)):
@@ -102,11 +107,15 @@ def _linearize_graph(graph, answer_toks):
         u_meta = graph.nodes[u]
         v_meta = graph.nodes[v]
 
+        node_list += [u, v]
+        node_dist += [shortest_paths[u], shortest_paths[v]]
+
         u_weight = u_meta['weight']
         v_weight = v_meta['weight']
         edge_weight = (u_weight + v_weight) / 2.0
         if edge_data['back_edge'] and not assigned_hl:
             v_name, assigned = highlight(v_name, answer_tok_set, threshold=max_overlap)
+            assigned_hl = assigned_hl or assigned
         if not edge_data['back_edge'] and not assigned_hl:
             u_name, assigned = highlight(u_name, answer_tok_set, threshold=max_overlap)
             assigned_hl = assigned_hl or assigned
@@ -134,7 +143,10 @@ def _linearize_graph(graph, answer_toks):
             weights += weight_arr
         num_edges += 1
     output_str = ' '.join(output)
-    return output_str, max_overlap, target_node_idx, num_edges, edge_list, edge_list_resolved, weights
+    return (
+        output_str, max_overlap, target_node_idx, num_edges, edge_list, edge_list_resolved, weights, node_list,
+        node_dist
+    )
 
 
 def linearize_graph(input):
@@ -150,13 +162,13 @@ def linearize_graph(input):
             ans = ans[k]
 
     a_toks = tokenize(ans)
-    graph_seq, max_overlap, target_node_idx, num_edges, edge_list, edge_list_resolved, weights = _linearize_graph(
-        graph, a_toks)
+    (graph_seq, max_overlap, target_node_idx, num_edges, edge_list, edge_list_resolved, weights, node_list,
+     node_dists
+     ) = _linearize_graph(graph, a_toks)
 
     graph_tok_set = set(graph_seq.split(' '))
     q_tok_set = set(q_toks) - STOPWORDS
     q_tok_recall = len(q_tok_set.intersection(graph_tok_set)) / max(1.0, float(len(q_tok_set)))
-
     return {
         'qid': id,
         'graph_seq': graph_seq,
@@ -168,7 +180,9 @@ def linearize_graph(input):
         'num_edges': num_edges,
         'edge_list': json.dumps(edge_list),
         'edge_list_resolved': json.dumps(edge_list_resolved),
-        'weights': json.dumps(weights)
+        'weights': json.dumps(weights),
+        'nodes': json.dumps(node_list),
+        'node_dists': json.dumps(node_dists)
     }
 
 
@@ -177,6 +191,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
+    parser.add_argument('--dtypes', default=None)
     args = parser.parse_args()
 
     dataset = dataset_factory(args.dataset)
@@ -185,10 +200,12 @@ if __name__ == '__main__':
     q_key = dataset.question_key()
     a_keys = dataset.answer_keys()
 
-    if dataset.name == 'squad':
-        dtypes = ['mini'] if args.debug else ['train', 'validation']
+    if args.dtypes is None:
+        dtypes = ['mini'] if args.debug else ['validation', 'train']
+        if not dataset.name == 'squad' and not args.debug:
+            dtypes.append('test')
     else:
-        dtypes = ['mini'] if args.debug else ['train', 'test', 'validation']
+        dtypes = args.dtypes.split(',')
 
     for dtype in dtypes:
         print('Linearizing knowledge graphs for {} set'.format(dtype))
@@ -206,3 +223,11 @@ if __name__ == '__main__':
         df = pd.DataFrame(outputs)
         print('Saving {} examples to {}'.format(df.shape[0], out_fn))
         df.to_csv(out_fn, index=False)
+
+        viable_out_fn = os.path.join('..', 'data', dataset.name, 'dataset_viable_{}.csv'.format(dtype))
+        df.dropna(inplace=True)
+        min_viable_q_recall = 0.5
+        min_viable_edges = 2
+        df = df[(df['q_tok_recall'] >= min_viable_q_recall) & (df['num_edges'] >= min_viable_edges)]
+        print('Saving {} examples to {}'.format(df.shape[0], out_fn))
+        df.to_csv(viable_out_fn, index=False)

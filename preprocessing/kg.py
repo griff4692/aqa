@@ -173,6 +173,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', default='hotpot_qa', help='trivia_qa or hotpot_qa')
     parser.add_argument(
         '-debug', default=False, action='store_true', help='If true, run on tiny portion of train dataset')
+    parser.add_argument('--dtypes', default=None)
     args = parser.parse_args()
 
     dataset = dataset_factory(args.dataset)
@@ -203,11 +204,13 @@ if __name__ == '__main__':
         model.to(f'cuda:{model.device_ids[0]}')
     model.eval()
 
-    update_incr = 10 if args.debug else 100
-    if dataset.name == 'squad':
+    if args.dtypes is None:
         dtypes = ['mini'] if args.debug else ['validation', 'train']
+        if not dataset.name == 'squad' and not args.debug:
+            dtypes.append('test')
     else:
-        dtypes = ['mini'] if args.debug else ['test', 'validation', 'train']
+        dtypes = args.dtypes.split(',')
+    print('Running KG builder for {} sets'.format(', '.join(dtypes)))
 
     results = []
     for dtype in dtypes:
